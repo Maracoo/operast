@@ -13,15 +13,72 @@ import operator
 # Design Goal: To cleanly separate the logic for ast navigation
 # from the logic applied by the visitor to a visited node
 
+# Separate code for building state machines from code that manages running
+# multiple state machines.
+
+
+################################################################################
+# GENERAL
+################################################################################
 
 ASTOptMutate = Callable[[ast.AST], Optional[ast.AST]]
 ASTPredicate = Callable[[ast.AST], bool]
 PatternElem = Union[ast.AST, Type[ast.AST]]
 State = int
-Result = Tuple[Optional[ast.AST], State]
-Transition = Callable[[ast.AST], Result]
+VisitF = Callable[[ast.AST], ast.AST]
 
 START: State = 0
+VISIT_ATTR = '__visit__'
+
+
+def _visit_wrapper(func: VisitF, pattern: List[PatternElem], at: int) -> VisitF:
+    setattr(func, VISIT_ATTR, _VisitorParams(pattern, at))
+    return func
+
+
+def visit(*pattern: PatternElem, at: Optional[int] = None):
+    _pattern = list(pattern)
+    if not _pattern:
+        raise ValueError('Pattern must contain at least one element')
+    at = len(_pattern) if at is None else at
+    if at > len(_pattern):
+        raise ValueError('Param "at" > pattern length')
+    _wrap = partial(_visit_wrapper, pattern=pattern, at=at)
+    return _wrap
+
+
+################################################################################
+# NEW_IMPLEMENTATION
+################################################################################
+
+
+Trans = Callable[[ast.AST], State]
+
+
+@dataclass(eq=False, frozen=True)
+class _NodeFSM2:
+    __slots__ = 'state_table'
+    state_table: Dict[State, Trans]
+
+    def __call__(self, state: State, node: ast.AST) -> State:
+        return self.state_table[state](node)
+
+
+def _make_transition_func() -> Trans:
+    pass
+
+
+def _make_state_table(pattern: List[PatternElem]) -> Dict[State, Trans]:
+    pass
+
+
+################################################################################
+# OLD_IMPLEMENTATION
+################################################################################
+
+
+Result = Tuple[Optional[ast.AST], State]
+Transition = Callable[[ast.AST], Result]
 
 
 @dataclass(eq=False, frozen=True)
@@ -109,7 +166,7 @@ def _check_children_loop(node: ast.AST, state: State, ts: List[Transition]) -> b
         return False
     children = list(ast.iter_child_nodes(node))
     if new_state == state:
-        # Retry 'Until' we fulfil current condition of hit end of branch
+        # Retry 'Until' we fulfil current condition or hit end of branch
         return any(_check_children_loop(n, state, ts) for n in children)
     if not ts[1:] and not children:
         # Return early to avoid calling any() with empty iterable as
@@ -142,7 +199,8 @@ def _check_identity(node: PatternElem) -> List[ASTPredicate]:
 
 
 UnaryOp = Callable[[bool], bool]
-ElemOp = Union[UnaryOp, ASTPredicate]
+BinaryOp = Callable[[bool, bool], bool]
+ElemOp = Union[UnaryOp, BinaryOp, ASTPredicate]
 
 
 @dataclass
@@ -269,24 +327,7 @@ class _VisitorParams:
         self.init_name = _elem_name(self.pattern[0])
 
 
-VISIT_ATTR = '__visit__'
-
-
-def visit(*pattern: PatternElem, at: Optional[int] = None):
-    _pattern = list(pattern)
-    if not _pattern:
-        raise ValueError('Pattern must contain at least one element')
-    at = len(_pattern) if at is None else at
-    if at > len(_pattern):
-        raise ValueError('Param "at" > pattern length')
-
-    def decorator(func):
-        setattr(func, VISIT_ATTR, _VisitorParams(_pattern, at))
-        return func
-    return decorator
-
-
-def _get_fsm(*fsm_dicts: FSMTrack) -> Generator[Tuple[_NodeFSM, State], None, None]:
+def _iter_fsm_dicts(*fsm_dicts: FSMTrack) -> Generator[Tuple[_NodeFSM, State], None, None]:
     for fsm_dict in fsm_dicts:
         for fsm, state_set in fsm_dict.items():
             for state in state_set:
@@ -315,7 +356,7 @@ class NodePatternVisitor:
         node_name = node.__class__.__name__
         updated: Dict[_NodeFSM, Set[State]] = defaultdict(set)
         init_fsm_dict = self._all_fsm.get(node_name, {})
-        for fsm, state in _get_fsm(fsm_dict, init_fsm_dict, self._wild_card_fsm):
+        for fsm, state in _iter_fsm_dicts(fsm_dict, init_fsm_dict, self._wild_card_fsm):
             _node, new_state = fsm(node, state)
             if _node is None:
                 return None
@@ -442,7 +483,7 @@ def configuration2(_cls):
     print(npp.all)
     exec(compile(cls_ast, '<ast>', mode='exec'), globals(), context)
 
-    # astpretty.pprint(cls_ast)
+    astpretty.pprint(cls_ast)
     return context[_cls.__name__]
 
 
