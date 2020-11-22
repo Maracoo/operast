@@ -1,23 +1,26 @@
 
+__all__ = ['BX', 'Scope', 'Let', 'Sub', 'HasChild', 'Not', 'Or', 'Basic',
+           'StateAffect', 'Until', 'While', 'Always', 'START', 'Transition']
+
 import ast
 # import astpretty
 from functools import partial
 # import inspect
 import operator
-from ast import AST, FunctionDef, Call
+from ast import AST
 from dataclasses import dataclass
-from typing import Optional, Type, Generator, Set, List, Generic, \
-    Tuple, Dict, Callable, Union, Any, TypeVar, cast as as_typ
+from typing import Optional, Type, Tuple, Dict, \
+    Callable, Union, Any, TypeVar, cast
 
 
 ASTOptMutate = Callable[[AST], Optional[AST]]
+ASTOptMutateThunk = Callable[[], Optional[AST]]
 
 ASTElem = Union[AST, Type[AST]]
 State = int
 VisitF = Callable[[AST], Optional[AST]]
 UnaryBoolOp = Callable[[bool], bool]
 BinaryBoolOp = Callable[[bool, bool], bool]
-Predicate = Callable[..., bool]
 TransitionFunc = Callable[[AST, State], Tuple[Optional[AST], State]]
 
 
@@ -28,7 +31,30 @@ T = TypeVar('T')
 U = TypeVar('U')
 
 
-Scope = Dict[str, Any]
+@dataclass(init=False)
+class Scope:
+    __slots__ = '_action', '_context'
+
+    def __init__(self, action: Optional[ASTOptMutateThunk] = None,
+                 context: Optional[Dict[str, Any]] = None):
+        self._action = action
+        self._context = {} if context is None else context
+
+    @property
+    def action(self) -> Optional[ASTOptMutateThunk]:
+        return self._action
+
+    @action.setter
+    def action(self, f: ASTOptMutateThunk) -> None:
+        if self._action is not None:
+            raise AttributeError('Action already set on scope')
+        self._action = f
+
+    @property
+    def context(self) -> Dict[str, Any]:
+        return self._context
+
+
 ValuePredicate = Callable[[Any, Scope], bool]
 ASTPredicate = Callable[[AST, Scope], bool]
 
@@ -50,8 +76,8 @@ class Let:
     name: str
 
 
-def _let(attr: str, let: Let, value: Any, scope: Scope) -> bool:
-    scope[attr] = {let.name: value}
+def _let(value: Any, scope: Scope, attr: str, let: Let) -> bool:
+    scope.context[attr] = {let.name: value}
     return True
 
 
@@ -61,26 +87,26 @@ class Sub:
     name: str
 
 
-def _sub(attr: str, sub: Sub, value: Any, scope: Scope) -> bool:
-    return attr in scope and scope[attr].get(sub.name, _NonValue) == value
+def _sub(value: Any, scope: Scope, attr: str, sub: Sub) -> bool:
+    return attr in scope.context and scope.context[attr].get(sub.name, _NonValue) == value
 
 
 # noinspection PyUnusedLocal
-def _value_eq(v1: Any, v2: Any, scope: Scope) -> bool:
-    return v1 == v2
+def _value_eq(value: Any, scope: Scope, other: Any) -> bool:
+    return value == other
 
 
-def _get_filter_attrs(node: ast.AST) -> Dict[str, Predicate]:
+def _get_filter_attrs(node: ast.AST) -> Dict[str, ValuePredicate]:
     filters = {}
-    for attr, value in node.__dict__.items():
-        if isinstance(value, BX):
-            filters[attr] = value.func
-        elif isinstance(value, Let):
-            filters[attr] = partial(_let, attr, value)
-        elif isinstance(value, Sub):
-            filters[attr] = partial(_sub, attr, value)
+    for attr, expr in node.__dict__.items():
+        if isinstance(expr, BX):
+            filters[attr] = expr.func
+        elif isinstance(expr, Let):
+            filters[attr] = partial(_let, attr=attr, let=expr)
+        elif isinstance(expr, Sub):
+            filters[attr] = partial(_sub, attr=attr, sub=expr)
         else:
-            filters[attr] = partial(_value_eq, v1=value)
+            filters[attr] = partial(_value_eq, other=expr)
     return filters
 
 
@@ -101,7 +127,7 @@ def _check_class(node: ast.AST, scope: Scope, _cls: Type[AST]) -> bool:
 
 # noinspection PyUnusedLocal
 def _any_node(node: ast.AST, scope: Scope) -> bool:
-    return True
+    return True  # pragma: no cover
 
 
 def _as_pred(e: Union['NodePredicate', ASTElem]) -> ASTPredicate:
@@ -116,20 +142,19 @@ def conjoin_n(*fs: Callable[..., bool]) -> Callable[..., bool]:
     return lambda *args, **kwargs: all(f(*args, **kwargs) for f in fs)
 
 
-def as_ast_pred(call: Union[Callable, partial]) -> ASTPredicate:
-    return as_typ(ASTPredicate, call)
-
-
 def node_identity(node: ASTElem) -> ASTPredicate:
-    # node is instance of some class in the ast hierarchy
+    # node is a type or an instance of some type in the ast hierarchy
     if isinstance(node, AST):
         cls_func = partial(_check_class, _cls=node.__class__)
         filters = _get_filter_attrs(node)
         if filters:
             attrs_func = partial(_check_attrs, filters=filters)
             return conjoin_n(cls_func, attrs_func)
-        return as_ast_pred(cls_func)
-    return as_ast_pred(partial(_check_class, _cls=node))
+        return cast('ASTPredicate', cls_func)
+    return cast('ASTPredicate', partial(_check_class, _cls=node))
+
+
+PredOrNodeElem = Union['NodePredicate', ASTElem]
 
 
 @dataclass
@@ -137,11 +162,8 @@ class NodePredicate:
     __slots__ = 'func'
     func: ASTPredicate
 
-    def __call__(self, e: Union['NodePredicate', ASTElem]) -> 'NodePredicate':
+    def __call__(self, e: PredOrNodeElem) -> 'NodePredicate':
         return NodePredicate(conjoin_n(self.func, _as_pred(e)))
-
-
-PatternElem = Union[NodePredicate, ASTElem]
 
 
 @dataclass
@@ -149,7 +171,7 @@ class UnaryNodeProposition:
     __slots__ = 'func'
     func: UnaryBoolOp
 
-    def __call__(self, e: PatternElem) -> NodePredicate:
+    def __call__(self, e: PredOrNodeElem) -> NodePredicate:
         return NodePredicate(compose_n(self.func, _as_pred(e)))
 
 
@@ -158,7 +180,7 @@ class BinaryNodeProposition:
     __slots__ = 'func'
     func: BinaryBoolOp
 
-    def __call__(self, e1: PatternElem, e2: PatternElem) -> NodePredicate:
+    def __call__(self, e1: PredOrNodeElem, e2: PredOrNodeElem) -> NodePredicate:
         return NodePredicate(compose_n(self.func, _as_pred(e1), _as_pred(e2)))
 
 
@@ -183,21 +205,34 @@ def _this_state(state: State) -> State:
     return state
 
 
-@dataclass
+@dataclass(init=False)
 class StateAffect:
-    succeed: StateChange = _next_state
-    fail: StateChange = _start_state
-    predicate: ASTPredicate = _any_node
+    __slots__ = 'succeed', 'fail', 'predicate'
 
-    def __call__(self, e: PatternElem) -> 'StateAffect':
+    def __init__(self, succeed: StateChange = _next_state,
+                 fail: StateChange = _start_state,
+                 predicate: ASTPredicate = _any_node):
+        self.succeed = succeed
+        self.fail = fail
+        self.predicate = predicate
+
+    def __call__(self, e: PredOrNodeElem) -> 'StateAffect':
+        if not (isinstance(e, (NodePredicate, AST)) or
+                (isinstance(e, type) and issubclass(e, AST))):
+            raise ValueError(f'StateAffect can only be called '
+                             f'with objects of type: {PredOrNodeElem}')
         return StateAffect(succeed=self.succeed,
                            fail=self.fail,
                            predicate=_as_pred(e))
 
 
+Basic = StateAffect()
 Until = StateAffect(fail=_this_state)
 While = StateAffect(succeed=_this_state)
 Always = StateAffect(succeed=_this_state, fail=_this_state)
+
+
+PatternElement = Union[StateAffect, PredOrNodeElem]
 
 
 @dataclass
@@ -213,36 +248,85 @@ class Transition:
             return node, self.succeed(self.state)
         return node, self.fail(self.state)
 
+    @classmethod
+    def build(cls, affect: StateAffect, state: State) -> 'Transition':
+        return cls(affect.predicate, affect.succeed, affect.fail, state)
+
 
 @dataclass
-class TransitionMutate(Transition):
-    __slots__ = 'mutate'
-    mutate: ASTOptMutate
+class TransitionAction(Transition):
+    __slots__ = 'action'
+    action: ASTOptMutate
 
     def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
         if self.predicate(node, scope):
-            return self.mutate(node), self.succeed(self.state)
+            return self.action(node), self.succeed(self.state)
+        return node, self.fail(self.state)
+
+    @classmethod
+    def build_action(cls, affect: StateAffect, state: State, action: ASTOptMutate) -> 'TransitionAction':
+        return cls(affect.predicate, affect.succeed, affect.fail, state, action)
+
+
+@dataclass
+class TransitionFuture(TransitionAction):
+    def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
+        scope.action = partial(self.action, node)
+        if self.predicate(node, scope):
+            return node, self.succeed(self.state)
         return node, self.fail(self.state)
 
 
-_test1 = node_identity(FunctionDef(name='f'))
-_test2 = Or(Call, Not(FunctionDef(name='f'))).func
-_test3 = Not(HasChild(ast.stmt)).func
+@dataclass
+class TransitionEnd(Transition):
+    def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
+        if self.predicate(node, scope):
+            assert scope.action is not None  # invariant, should never be false
+            return scope.action(), self.succeed(self.state)
+        return node, self.fail(self.state)
 
-td = {'a': 1}
-_test4 = node_identity(AST(name='f', store=Let('s')))
-_test5 = node_identity(AST(name=BX(lambda x, scope: x != 'f')))
 
-td2 = {'sub': {'s': 10}}
-_test6 = node_identity(AST(sub=Sub('s')))
-_test7 = Not(AST(sub=Sub('s'))).func
+@dataclass
+class FiniteStateMachine:
+    __slots__ = 'state_table'
+    state_table: Dict[State, Transition]
+
+    def __call__(self, node: AST, state: State, scope: Scope) -> Tuple[Optional[AST], State]:
+        return self.state_table[state](node, scope)
+
+
+def make_fsm(*pattern: PatternElement, action: ASTOptMutate,
+             at: Optional[State] = None) -> FiniteStateMachine:
+    if not pattern:
+        raise ValueError
+    end_state = len(pattern) - 1  # zero based
+    _at = end_state if at is None else at
+    if _at > end_state:
+        raise ValueError
+
+    state_table: Dict[State, Transition] = {}
+
+    for state, elem in enumerate(pattern):
+        state_affect = elem if isinstance(elem, StateAffect) else Basic(elem)
+        if state == _at and state == end_state:
+            transition = TransitionAction.build_action(state_affect, state, action)
+        elif state == _at:
+            transition = TransitionFuture.build_action(state_affect, state, action)
+        elif state != _at and state_table == end_state:
+            transition = TransitionEnd.build(state_affect, state)
+        else:
+            transition = Transition.build(state_affect, state)
+        state_table[state] = transition
+
+    return FiniteStateMachine(state_table=state_table)
+
+
+# Have a TransitionEnd class to indicate when the action should fire
+# And have a TransitionFuture class which passes alone it's ASTOptMutate in the scope waiting to be called
 
 
 # drawback: have to check spelling of attributes
 
-# def test_1():
-#     assert True
 
-
-if __name__ == '__main__':
-    print(_test7(FunctionDef(name='f', store='hhh', sub=10), td2))
+# if __name__ == '__main__':
+#     print(_test7(FunctionDef(name='f', store='hhh', sub=10), td2))

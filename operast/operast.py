@@ -340,11 +340,11 @@ class NodePatternVisitor:
         self._wild_card_fsm = self._all_fsm.pop(ast.AST.__name__, {})
 
     def _make_all_fsm(self) -> Dict[str, FSMTrack]:
-        fsm_dict: Dict[str, FSMTrack] = defaultdict(as_typ(Callable[..., FSMTrack], dict))
+        fsm_dict: Dict[str, FSMTrack] = defaultdict(as_typ('Callable[..., FSMTrack]', dict))
         for func in _calls(self):
             if hasattr(func, VISIT_ATTR):
                 params: _VisitorParams = getattr(func, VISIT_ATTR)
-                visit_func = as_typ(ASTOptMutate, partial(func, self))
+                visit_func = as_typ('ASTOptMutate', partial(func, self))
                 fsm = _make_fsm(params.pattern, visit_func, params.at)
                 fsm_dict[params.init_name].update({fsm: {START}})
         return fsm_dict
@@ -539,6 +539,6 @@ class AA:
         return self.d
 
 
-if __name__ == '__main__':
-    a_v = AA(d=False).b
-    pass
+# if __name__ == '__main__':
+#     a_v = AA(d=False).b
+#     pass
