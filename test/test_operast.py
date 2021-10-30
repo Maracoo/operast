@@ -124,15 +124,24 @@ def test_conjoin_n():
         return num > 3
 
     def func2(num: int) -> bool:
-        return num < 5
+        return num < 6
 
-    conjoined = operast2.conjoin_n(func1, func2)
+    def func3(num: int) -> bool:
+        return num != 5
+
+    conjoined = operast2.conjoin_n(func1, func2, func3)
 
     result1 = conjoined(num=4)
     assert result1
 
     result2 = conjoined(num=10)
     assert not result2
+
+    result3 = conjoined(num=2)
+    assert not result3
+
+    result4 = conjoined(num=5)
+    assert not result4
 
 
 def test_node_identity():
@@ -281,26 +290,6 @@ def test_While():
 
     _, fail_state = transition(node_fail, Scope())
     assert fail_state == START
-
-    _, success_state = transition(node_success, Scope())
-    assert success_state == initial_state
-
-
-# noinspection PyPep8Naming,DuplicatedCode
-def test_Always():
-    state_affect = Always(ast.FunctionDef)
-
-    node_fail = ast.ClassDef()
-    node_success = ast.FunctionDef()
-    initial_state = 1
-
-    transition = Transition(state_affect.predicate,
-                            state_affect.succeed,
-                            state_affect.fail,
-                            initial_state)
-
-    _, fail_state = transition(node_fail, Scope())
-    assert fail_state == initial_state
 
     _, success_state = transition(node_success, Scope())
     assert success_state == initial_state
