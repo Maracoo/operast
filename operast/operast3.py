@@ -2,7 +2,7 @@ import ast
 import astpretty
 import inspect
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterator, Optional, Tuple, Type, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Type, Union
 
 
 class StateEff:
@@ -10,8 +10,13 @@ class StateEff:
         self.node = node
 
 
-PatternElem = Union[ast.AST, Type[ast.AST], StateEff,
-                    Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]]
+PatternElem = Union[
+    ast.AST, Type[ast.AST], StateEff,
+    Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
+]
+BranchElem = Union['BranchPattern', PatternElem]
+BranchExpr = Union[str, List[Union[str, 'BranchExpr']]]
+Aliases = Dict[str, 'Seq']
 
 
 def iter_child_names_nodes(node: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
@@ -31,86 +36,62 @@ def iter_child_names_nodes(node: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
                     yield name, item
 
 
-def _node_pattern_expand(node: ast.AST) -> Optional['BranchPattern']:
-    # possible elements inside the fields of an AST node:
-    # ast.AST, Type[ast.AST], BranchPattern
-    and_elements = []
-
-    for name, field in ast.iter_fields(node):
-        # case: ast.AST
-        if isinstance(field, ast.AST):
-            path = _node_pattern_expand(field)
-            seq = (name, field) if path is None else Seq((name, field), path)
-            and_elements.append(seq)
-            delattr(node, name)
-        # case: Type[ast.AST]
-        elif isinstance(field, type) and issubclass(node, ast.AST):
-            and_elements.append((name, field))
-            delattr(node, name)
-        # case: BranchPattern
-        elif isinstance(field, BranchPattern):
-            and_elements.append(field.pushdown_fieldname(name).expand())
-            delattr(node, name)
-        # case: StateEff
-        elif isinstance(field, StateEff):
-            and_elements.append((name, field))
-            delattr(node, name)
-
-        elif isinstance(field, list):
-            then_elements = []
-            non_pattern_elements = []
-            for item in field:
-                # case: ast.AST
-                if isinstance(item, ast.AST):
-                    pat = _node_pattern_expand(item)
-                    seq = (name, item) if pat is None else Seq((name, item), pat)
-                    then_elements.append(seq)
-                # case: Type[ast.AST]
-                elif isinstance(item, type) and issubclass(item, ast.AST):
-                    then_elements.append((name, item))
-                # case: BranchPattern
-                elif isinstance(item, BranchPattern):
-                    then_elements.append(item.pushdown_fieldname(name).expand())
-                # case: StateEff
-                elif isinstance(item, StateEff):
-                    then_elements.append(item)
-                # case: non-expanding element
-                else:
-                    non_pattern_elements.append(item)
-
-            if non_pattern_elements:
-                setattr(node, name, non_pattern_elements)
-            else:
-                delattr(node, name)
-
-            if len(then_elements) == 1:
-                and_elements.append(Seq(*then_elements))
-            elif then_elements:
-                and_elements.append(Then(*then_elements))
-
-    if len(and_elements) == 1:
-        return Seq(*and_elements)
-    if and_elements:
-        return And(*and_elements)
+def expand_cases(name: str, elem: Any) -> Union['BranchPattern', PatternElem, None]:
+    # case: ast.AST
+    if isinstance(elem, ast.AST):
+        pat = node_expand(elem)
+        return (name, elem) if pat is None else Seq((name, elem), pat)
+    # case: Type[ast.AST]
+    if isinstance(elem, type) and issubclass(elem, ast.AST):
+        return name, elem
+    # case: BranchPattern
+    if isinstance(elem, BranchPattern):
+        return elem.pushdown_fieldname(name).expand()
+    # case: StateEff
+    if isinstance(elem, StateEff):
+        return name, elem
     return None
 
 
-def _pattern_expand(elem: Union['BranchPattern', PatternElem]) -> Union['BranchPattern', PatternElem]:
+def node_expand(node: ast.AST) -> Optional['BranchPattern']:
+    # possible elements inside the fields of an AST node:
+    # ast.AST, Type[ast.AST], BranchPattern
+    and_elements = []
+    for name, field in ast.iter_fields(node):
+        if isinstance(field, list):
+            then_elements = []
+            non_expand_elements = []
+            for item in field:
+                expanded = expand_cases(name, item)
+                if expanded is None:
+                    non_expand_elements.append(item)
+                else:
+                    then_elements.append(expanded)
+            if then_elements:
+                and_elements.append(Then(*then_elements))
+                if non_expand_elements:
+                    setattr(node, name, non_expand_elements)
+                else:
+                    delattr(node, name)
+        else:
+            expanded = expand_cases(name, field)
+            if expanded is not None:
+                and_elements.append(expanded)
+                delattr(node, name)
+    return And(*and_elements) if and_elements else None
+
+
+def branch_expand(elem: BranchElem) -> BranchElem:
+    # case: Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
     if isinstance(elem, tuple):
         name, node = elem
-        # case: Tuple[str, ast.AST]
-        if isinstance(node, ast.AST):
-            pat = _node_pattern_expand(node)
-            return (name, node) if pat is None else Seq((name, node), pat)
-        # case: Tuple[str, Type[ast.AST]]
-        if isinstance(node, type) and issubclass(node, ast.AST):
-            return name, node
-        # case: Tuple[str, StateEff]
-        if isinstance(node, StateEff):
-            return name, node
+        expanded = branch_expand(node)
+        if isinstance(expanded, BranchPattern):
+            return expanded.pushdown_fieldname(name)
+        return name, expanded
     # case: ast.AST
     if isinstance(elem, ast.AST):
-        pat = _node_pattern_expand(elem)
+        pat = node_expand(elem)
         return elem if pat is None else Seq(elem, pat)
     # case: Type[ast.AST]
     if isinstance(elem, type) and issubclass(elem, ast.AST):
@@ -123,20 +104,45 @@ def _pattern_expand(elem: Union['BranchPattern', PatternElem]) -> Union['BranchP
         return elem.expand()
 
 
-class PatternError(Exception):
-    pass
+def node_equals(a: ast.AST, b: ast.AST) -> bool:
+    if a.__class__ is not b.__class__:
+        return False
+    a_fields = list(ast.iter_fields(a))
+    b_fields = list(ast.iter_fields(b))
+    return (len(a_fields) == len(b_fields)
+            and all(a == b for a, b in zip(a_fields, b_fields)))
+
+
+def pattern_elem_equals(a: PatternElem, b: PatternElem) -> bool:
+    # case: Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
+    if isinstance(a, tuple) and isinstance(b, tuple):
+        (label_a, elem_a), (label_b, elem_b) = a, b
+        return label_a == label_b and pattern_elem_equals(elem_a, elem_b)
+    # case: ast.AST
+    if isinstance(a, ast.AST) and isinstance(b, ast.AST):
+        return node_equals(a, b)
+    # case: Type[ast.AST]
+    if isinstance(a, type) and isinstance(b, type):
+        return a is b
+    # case: StateEff
+    if isinstance(a, StateEff) and isinstance(b, StateEff):
+        return node_equals(a.node, b.node)
+    return False
 
 
 class BranchPattern(ABC):
     __slots__ = 'elems',
 
-    def __init__(self, *elems: Union['BranchPattern', PatternElem]):
+    def __init__(self, *elems: BranchElem):
         if not elems:
             raise ValueError(f"{self.__class__.__name__} cannot be empty.")
         self.elems = elems
 
     def __len__(self) -> int:
         return len(self.elems)
+
+    def __iter__(self) -> Iterator[BranchElem]:
+        yield from self.elems
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({', '.join(repr(e) for e in self.elems)})"
@@ -150,36 +156,44 @@ class BranchPattern(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _alias(self, counter: int, aliases: Dict[str, 'Seq']) -> Tuple[int, Dict[str, 'Seq'], Any]:
+    def _alias(self, counter: int, aliases: Aliases) -> Tuple[int, Aliases, BranchExpr]:
         raise NotImplementedError
 
-    def alias(self, offset: int = 0) -> Tuple[Dict[str, 'Seq'], Any]:
+    def alias(self, offset: int = 0) -> Tuple[Aliases, BranchExpr]:
         _, aliases, expr = self._alias(offset, {})
         return aliases, expr
 
     def expand(self) -> 'BranchPattern':
-        return self.__class__(*(_pattern_expand(e) for e in self.elems))
+        return self.__class__(*(branch_expand(e) for e in self.elems))
 
 
 class Seq(BranchPattern):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Seq):
+            return NotImplemented
+        return all(pattern_elem_equals(i, j) for i, j in zip(self, other))
+
     def normalise(self, *elems: PatternElem) -> BranchPattern:
         for i, elem in enumerate(self.elems):
             if isinstance(elem, BranchPattern):
                 if len(self.elems) > i + 1:
-                    raise PatternError("pattern elems found after branch pattern in Seq")
+                    raise ValueError(
+                        f"pattern elems found after branch pattern in {self}"
+                    )
                 return elem.normalise(*elems, *self.elems[:i])
         return Seq(*elems, *self.elems)
 
-    def pushdown_fieldname(self, name: str) -> 'BranchPattern':
+    def pushdown_fieldname(self, name: str) -> BranchPattern:
         first = self.elems[0]
         if isinstance(first, BranchPattern):
             return Seq(first.pushdown_fieldname(name), *self.elems[1:])
         return Seq((name, first), *self.elems[1:])
 
-    def _alias(self, counter: int, aliases: Dict[str, 'Seq']) -> Tuple[int, Dict[str, 'Seq'], Any]:
+    def _alias(self, counter: int, aliases: Aliases) -> Tuple[int, Aliases, BranchExpr]:
         counter += 1
-        aliases[f"S{counter}"] = self
-        return counter, aliases, f"S{counter}"
+        expr = f"S{counter}"
+        aliases[expr] = self
+        return counter, aliases, expr
 
 
 class And(BranchPattern):
@@ -204,17 +218,17 @@ class And(BranchPattern):
             return Seq(*elems, elem)
         return self.__class__(*self._normalise_iter(*elems))
 
-    def _pushdown_fieldname_iter(self, name: str) -> Iterator[Union['BranchPattern', PatternElem]]:
+    def _pushdown_fieldname_iter(self, name: str) -> Iterator[BranchElem]:
         for elem in self.elems:
             if isinstance(elem, BranchPattern):
                 yield elem.pushdown_fieldname(name)
             else:
                 yield name, elem
 
-    def pushdown_fieldname(self, name: str) -> 'BranchPattern':
+    def pushdown_fieldname(self, name: str) -> BranchPattern:
         return self.__class__(*self._pushdown_fieldname_iter(name))
 
-    def _alias(self, counter: int, aliases: Dict[str, 'Seq']) -> Tuple[int, Dict[str, 'Seq'], Any]:
+    def _alias(self, counter: int, aliases: Aliases) -> Tuple[int, Aliases, BranchExpr]:
         expr_list = [self.__class__.__name__]
         for elem in self.elems:
             counter, aliases, expr = elem._alias(counter, aliases)
@@ -392,9 +406,14 @@ if __name__ == '__main__':
     #     ]
     # )
 
+    ex1, _ = example.normalise().alias()
     print(example.normalise())
 
-    print(example_unexpanded.expand().normalise().alias())
+    ex2, _ = example_unexpanded.expand().normalise().alias()
+    print(example_unexpanded.expand().normalise())
+
+    # for key in ex1:
+    #     print(ex1[key] == ex2[key])
 
     # print(Seq(ast.ClassDef(
     #     body=[
@@ -403,10 +422,16 @@ if __name__ == '__main__':
     #     ]
     # )).expand().normalise())
 
-    print(And(Seq(ast.Name)).normalise())
+    s40 = And(Seq(ast.Name(id='b'))).normalise()
+    print(s40)
 
     print(And(And(And(ast.Call))).normalise())
 
-    print(Seq(And(Seq(ast.Name))).normalise().alias())
+    s30 = Seq(And(Seq(ast.Name(id='b')))).normalise()
+    print(s30)
+
+    print(s30 == s40)
 
     print(And(Then(Or(And(Then(Seq(ast.Call))), ast.AST))).normalise().alias())
+
+    print(pattern_elem_equals(ast.Name(id='b'), ast.Name(id='b')))
