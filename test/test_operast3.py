@@ -1,137 +1,116 @@
+
 from operast.operast3 import *
-from ast import *
 
-# Examples
 
-# 1.0
-Seq(
-    Module,
-    And(
-        FunctionDef,
-        Assign(value=Num),
+def test_branch_equals_false_1():
+    a = Seq(ast.ClassDef(name='SomeClass'))
+    b = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    result = branch_equals(a, b)
+    assert not result
+
+
+def test_branch_equals_false_2():
+    a = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    b = Seq(ast.ClassDef(name='SomeClass'), And(Then(('something', ast.Assign))))
+    result = branch_equals(a, b)
+    assert not result
+
+
+def test_branch_equals_false_3():
+    a = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    b = Seq(ast.ClassDef(name='SomeClass'), And(Then(ast.Assign)))
+    result = branch_equals(a, b)
+    assert not result
+
+
+def test_branch_equals_false_4():
+    a = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    b = Seq(ast.ClassDef(name='SomeClass'), And(And(('body', ast.Assign))))
+    result = branch_equals(a, b)
+    assert not result
+
+
+def test_branch_equals_true():
+    a = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    b = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    result = branch_equals(a, b)
+    assert result
+
+
+def test_branch_expand_ast_inst():
+    ast_inst = ast.ClassDef(
+        name='SomeClass',
+        body=[ast.Assign],
     )
-)
+    expanded = branch_expand(ast_inst)
+    expected = Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign))))
+    result = branch_equals(expanded, expected)
+    assert result, (expanded, expected)
 
-# becomes 1.1
-Seq(
-    Module,
-    And(
-        FunctionDef,
-        Seq(
-            Assign,
-            ('value', Num)
-        )
-    )
-)
 
-# becomes 1.2
-p1 = Seq(Module, FunctionDef)
-p2 = Seq(Module, Assign, ('value', Num))
+def test_branch_expand_ast_type():
+    ast_type = ast.ClassDef
+    expanded = branch_expand(ast_type)
+    expected = ast.ClassDef
+    result = branch_equals(expanded, expected)
+    assert result, (expanded, expected)
 
-# Each distinct combinations of branches which satisfy an 'And' should result
-# in a match of the pattern. Thus we have to track which branches have
-# satisfied the fsm and take action based on combinations of these. This
-# tracking also has to be indexed by the location from which we started the
-# 'And'. The indexing by location is handled by instantiating a new fsm for
-# each new node we traverse.
 
-# 2.0
-Seq(
-    Or(
-        FunctionDef,
-        ClassDef
-    ),
-    Call(func=Name)
-)
+def test_branch_expand_branch_pattern():
+    branch_pattern = And(ast.ClassDef(
+        name='SomeClass',
+        body=[ast.Assign],
+    ))
+    expanded = branch_expand(branch_pattern)
+    expected = And(Seq(ast.ClassDef(name='SomeClass'), And(Then(('body', ast.Assign)))))
+    result = branch_equals(expanded, expected)
+    assert result, (expanded, expected)
 
-# becomes 2.1
-Seq(
-    Or(
-        FunctionDef,
-        ClassDef,
-    ),
-    Call,
-    ('func', Name)
-)
 
-# becomes 2.2
-p3 = Seq(FunctionDef, Call, ('func', Name))
-p4 = Seq(ClassDef, Call, ('func', Name))
+def test_branch_expand_tuple_ast_type():
+    tuple_ast_type = ('body', ast.ClassDef)
+    expanded = branch_expand(tuple_ast_type)
+    expected = ('body', ast.ClassDef)
+    result = branch_equals(expanded, expected)
+    assert result, (expanded, expected)
 
-# The AST lists in AST nodes should be transformed into 'Then' rather than
-# 'And' structures, since these lists are ordered. In order to track 'Then'
-# satisfaction we need to be able to order the nodes which satisfy a condition
-# and ensure that for 'Then' conditions, later nodes satisfy later conditions.
-# To do this we number each node (as previously thought) in such a way that
-# later nodes are greater than earlier nodes. A simple solution is to start
-# numbering peer nodes using a counter starting from 1 and then increase the
-# counter for each peer, for each new node which we traverse to we reset the
-# counter. This is also ensures we do not need to hold counter state across
-# nodes. Then for each new layer, we do not add the new node value, but rather
-# append the number, thus constructing a consecutive id. Thus for the structure:
-#
-# a -+- c
-#    |
-#    +- b
-#
-# we get:
-#
-# 1 -+- 11
-#    |
-#    +- 12
-#
-# Once we have this we extend all numbers to the length of the longest number,
-# filling with zeroes. Thus we obtain:
-#
-# 10 -+- 11
-#     |
-#     +- 12
-#
-# We allows us to both ascertain parent nodes, and know the order of child
-# nodes.
-#
-# NAH this doesn't work if a node has more than 9 children. So probably better
-# to have a tuple of ints structure where we just add more entries for each
-# layer of the tree. Then we count up as before with the children of each layer
-# incrementing the counter for that layer in the tuple. Finally we implement a
-# function (or class) which provides and ordering for these tuple of counters.
-# Could use the collections.Counter class in python. Interestingly, this format
-# is similar to a radix-invariant format for notating numbers.
 
-# 3.0
-ClassDef(
-    body=[
-        Assign,
-        FunctionDef(
-            body=[
-                Assign
-            ]
-        )
-    ]
-)
+def test_branch_expand_tuple_ast_inst():
+    tuple_ast_inst = ('body', ast.Name(ctx=ast.Load()))
+    expanded = branch_expand(tuple_ast_inst)
+    expected = Seq(('body', ast.Name()), And(('ctx', ast.Load())))
+    result = branch_equals(expanded, expected)
+    assert result, (expanded, expected)
 
-# becomes 3.1
-Seq(
-    ClassDef,
-    Then(
-        ('body', Assign),
-        Seq(
-            ('body', FunctionDef),
-            Then(
-                ('body', Assign)
-            )
-        )
-    )
-)
 
-# becomes 3.2
-p5 = Seq(ClassDef, ('body', Assign))
-p6 = Seq(ClassDef, FunctionDef, ('body', Assign))
+def test_branch_pattern_len():
+    bp1 = Seq(ast.ClassDef, ast.FunctionDef, ast.Name)
+    res1 = len(bp1) == 3
+    assert res1
 
-# Repeat Sequence
-#
-# NB: implement a 'Times' operator which allows for easy specification of
-# repeated AST elements.
+    bp2 = And(Seq(ast.Name, ast.Load), ast.ClassDef)
+    res2 = len(bp2) == 2
+    assert res2
 
-# 4.0
-p7 = Seq(FunctionDef, FunctionDef, Assign)
+
+def test_branch_pattern_iter():
+    bp = Seq(ast.Assign, ast.And, ast.Or, ast.alias)
+    bp_list = [i for i in bp]
+    expected = [ast.Assign, ast.And, ast.Or, ast.alias]
+    assert bp_list == expected
+
+
+def test_branch_pattern_repr():
+    bp1 = Seq(ast.Name)
+    repr1 = "Seq(<class '_ast.Name'>)"
+    result1 = str(bp1) == repr1
+    assert result1, (str(bp1), repr1)
+
+    bp2 = Then(Seq(ast.Name), ast.FunctionDef)
+    repr2 = "Then(Seq(<class '_ast.Name'>), <class '_ast.FunctionDef'>)"
+    result2 = str(bp2) == repr2
+    assert result2, (str(bp2), repr2)
+
+
+def test_seq_first_normal():
+    pass

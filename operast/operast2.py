@@ -107,6 +107,8 @@ def _value_eq(value: Any, scope: Scope, other: Any) -> bool:
 
 def _get_filter_attrs(node: ast.AST) -> Dict[str, ValuePredicate]:
     filters = {}
+    # todo: using node.__dict__ will fail as this include _attributes of a node
+    #  as well as all _fields
     for attr, expr in node.__dict__.items():
         if isinstance(expr, BX):
             filters[attr] = expr.func
