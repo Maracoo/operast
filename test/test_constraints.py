@@ -11,18 +11,25 @@ class TestSibling:
     #   2) Sib(x, A, Sib(y, B, C)) -> [Sib(x, A, B), Sib(y, B, C)]
     def test_sibling_flatten_2(self):
         flattened = Sibling(0, Term('A'), Sibling(1, Term('B'), Term('C'))).flatten()
-        result = [Sibling(0, Term('A'), Term('B')), Sibling(1, Term('A'), Term('B'))]
+        result = [Sibling(0, Term('A'), Term('B')), Sibling(1, Term('B'), Term('C'))]
+        assert flattened == result
+
+    def test_sibling_flatten_complex(self):
+        flattened = Sibling(0, Sibling(1, Term('A'), Term('D')), Sibling(1, Term('B'), Term('C'))).flatten()
+        result = [Sibling(0, Term('A'), Term('B')), Sibling(1, Term('A'), Term('D')), Sibling(1, Term('B'), Term('C'))]
         assert flattened == result
 
 
 # Cases:
 #   1) Ord(A, B) => A -> B
-#   2) Ord(A, [B, C]) => A -> B, A -> C
-#   3) Ord([A, B], C) => A -> C, B -> C
-#   4) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
-#   5) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
-#   6) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) => A -> B -> D, A -> C -> D, A -> E
-#   7) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
+#   2) Ord(A, Ord(B, C)) => A -> B -> C
+#   3) Ord(A, [B, C]) => A -> B, A -> C
+#   4) Ord([A, B], C) => A -> C, B -> C
+#   5) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
+#   6) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
+#   7) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) =>
+#       A -> B -> D, A -> C -> D, A -> E
+#   8) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
 #       A -> B -> D -> F, A -> C -> D -> F, A -> E -> F
 #
 class TestOrdered:
@@ -32,39 +39,66 @@ class TestOrdered:
         result = {'A': {'B'}}
         assert dag == result
 
-#   2) Ord(A, [B, C]) => A -> B, A -> C
+    #   2) Ord(A, Ord(B, C)) => A -> B -> C
     def test_ordered_dag_2(self):
+        dag = Ord(Term('A'), Ord(Term('B'), Term('C'))).to_dag()
+        result = {'A': {'B'}, 'B': {'C'}}
+        assert dag == result
+
+    #   3) Ord(A, [B, C]) => A -> B, A -> C
+    def test_ordered_dag_3(self):
         dag = Ord(Term('A'), [Term('B'), Term('C')]).to_dag()
         result = {'A': {'B', 'C'}}
         assert dag == result
 
-#   3) Ord([A, B], C) => A -> C, B -> C
-    def test_ordered_dag_3(self):
+    #   4) Ord([A, B], C) => A -> C, B -> C
+    def test_ordered_dag_4(self):
         dag = Ord([Term('A'), Term('B')], Term('C')).to_dag()
         result = {'A': {'C'}, 'B': {'C'}}
         assert dag == result
 
-#   4) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
-    def test_ordered_dag_4(self):
+    #   5) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
+    def test_ordered_dag_5(self):
         dag = Ord(Term('A'), [Ord(Term('B'), Term('C')), Term('D')]).to_dag()
         result = {'A': {'B', 'D'}, 'B': {'C'}}
         assert dag == result
 
-#   5) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
-    def test_ordered_dag_5(self):
+    #   6) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
+    def test_ordered_dag_6(self):
         dag = Ord([Term('A'), Ord(Term('B'), Term('C'))], Term('D')).to_dag()
         result = {'A': {'D'}, 'B': {'C'}, 'C': {'D'}}
         assert dag == result
 
-#   6) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) => A -> B -> D, A -> C -> D, A -> E
-    def test_ordered_dag_6(self):
+    #   7) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) =>
+    #       A -> B -> D, A -> C -> D, A -> E
+    def test_ordered_dag_7(self):
         dag = Ord(Term('A'), [Ord([Term('B'), Term('C')], Term('D')), Term('E')]).to_dag()
         result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}}
         assert dag == result
 
-#   7) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
+    #   8) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
     #       A -> B -> D -> F, A -> C -> D -> F, A -> E -> F
-    def test_ordered_dag_7(self):
+    def test_ordered_dag_8(self):
         dag = Ord(Term('A'), [Ord([Term('B'), Term('C')], Term('D')), Term('E')], Term('F')).to_dag()
         result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}, 'D': {'F'}, 'E': {'F'}}
         assert dag == result
+
+    def test_ord_dag_complex(self):
+        dag = Ord(
+            Term('A'),
+            Ord(Term('N1'), Term('N2')),
+            [Term('B1'), Term('C1')],
+            [Term('B2'), Term('C2')],
+            Term('D')
+        ).to_dag()
+
+        expected = {
+            'A': {'N1'},
+            'N1': {'N2'},
+            'N2': {'B1', 'C1'},
+            'B1': {'B2', 'C2'},
+            'C1': {'B2', 'C2'},
+            'B2': {'D'},
+            'C2': {'D'}
+        }
+        assert dag == expected

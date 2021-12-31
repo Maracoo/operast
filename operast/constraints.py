@@ -51,6 +51,10 @@ class Sibling:
         return (self.index == other.index and
                 all(a == b for a, b in zip(self.elems, other.elems)))
 
+    def __repr__(self) -> str:
+        elem_reprs = ', '.join(repr(e) for e in self.elems)
+        return f"Sibling(index={self.index}, {elem_reprs})"
+
     # Rules:
     #   1) Sib(x, A, B) => [Sib(x, A, B)]
     #   2) Sib(x, A, Sib(y, B, C)) => [Sib(x, A, B), Sib(y, B, C)]
@@ -62,7 +66,7 @@ class Sibling:
                 continue
             flattened = elems[i].flatten()
             ret.extend(flattened)
-            elems[i] = elems[0]
+            elems[i] = flattened[0].elems[0]
         return ret
 
 
@@ -74,6 +78,10 @@ class Ord:
 
     def __init__(self, *elems: OrdElem):
         self.elems = elems
+
+    def __repr__(self) -> str:
+        elem_reprs = ', '.join(repr(e) for e in self.elems)
+        return f"Ord({elem_reprs})"
 
     def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
         for elem in self.elems:
@@ -97,7 +105,3 @@ class Ord:
             for i in range(len(links) - 1):
                 ret[links[i]].add(links[i+1])
         return ret
-
-
-if __name__ == '__main__':
-    print(Ord(Term('A'), [Ord(Term('B1'), Term('M')), Term('C1')], [Term('B2'), Term('C2')], Term('D')).to_dag())

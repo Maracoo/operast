@@ -4,7 +4,7 @@ __all__ = ["And", "Branch", "Or", "StateEff", "Then"]
 import ast
 from abc import ABC, abstractmethod
 from itertools import product
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, Union
 
 
 # noinspection PyProtectedMember
@@ -31,9 +31,6 @@ PatternElem = Union[
 TreeElem = Union['TreePattern', PatternElem]
 BranchExpr = Union[str, List['BranchExpr']]
 Aliases = Dict[str, 'Branch']
-
-
-TP = TypeVar('TP', bound='TreePattern')
 
 
 def iter_all_ast_fields(node: ast.AST) -> Iterator[Tuple[str, Any]]:

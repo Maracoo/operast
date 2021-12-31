@@ -4,4 +4,5 @@ pytest \
   --cov="operast/" \
   --cov-branch \
   --cov-report=term \
-  --cov-report=html
+  --cov-report=html \
+  "test/"
