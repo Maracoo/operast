@@ -90,18 +90,6 @@ example_unexpanded = Branch(
     )
 )
 
-# + FunctionDef
-# |    |
-# |    +- ClassDef
-# |    |    |
-# |    |    +- Assign, Name, Store
-# |    |    +- FunctionDef
-# |    |
-# |    +- Call
-
-# FunctionDef, ClassDef, Assign, Name, Store
-# FunctionDef, Call
-
 
 # becomes
 example = Branch(
@@ -126,33 +114,6 @@ example = Branch(
 p1 = Branch(ast.FunctionDef, ast.ClassDef, ('body', ast.Assign), ast.Name(id='b'), ('ctx', ast.Store))
 p2 = Branch(ast.FunctionDef, ast.ClassDef, ('body', ast.FunctionDef))
 p3 = Branch(ast.FunctionDef, Until(ast.Call))
-
-
-# implement AND as an all(any(fsm(branches)))?
-#
-# to ensure we only loop once through the branches:
-# all(any(t) for t in zip(*(tuple(f(b) for f in fsm) for b in branches)))
-
-# T F F      T F F
-# F T F  ->  F T T
-# F T F      F F F
-
-
-# We have to use dfs, we move fsm's in and out of scope as we enter and exit
-# their stacks, and we track the state of a stack as we go. So when we enter
-# into an 'And' stack we produce state to track whether all branches have been
-# satisfied, and then we go until all true or until we run out of nodes in this
-# sub-tree. Indeed once we have satisfied one of the 'And' fsm's we can stop
-# checking it as an optimisation. Once all 'And' fsm's have been satisfied we
-# are able to traverse to the next stack once we finish traversing the nodes
-# for this sub-tree, in this way the stacks traverse by bfs.
-
-# register 'return' (callback) points for all fsm's to report back to, when
-# they get to their accepting states they will return True to this location.
-
-# use collections.deque to implement an "action stack" of (func, node) pairs
-# that we build up as we match the tree, these will be pushed, popped and run
-# in FIFO order. Could also be a stack of partially applied functions.
 
 
 def to_ast(x: Any) -> ast.AST:
@@ -240,12 +201,12 @@ if __name__ == '__main__':
     #     ]
     # )).expand().first_normal().second_normal())
 
-    s40 = And(Branch(ast.Name(id='b'))).canonical_nf().logical_nf()
+    s40 = And(Branch(ast.Name(id='b'))).canonical_nf()
     # print(s40)
 
     # print(And(And(And(ast.Call))).first_normal().second_normal())
 
-    s30 = Branch(And(Branch(ast.Name(id='b')))).canonical_nf().logical_nf()
+    s30 = Branch(And(Branch(ast.Name(id='b')))).canonical_nf()
 
     # print(s30)
 
@@ -317,6 +278,6 @@ if __name__ == '__main__':
     #
     # print(Seq(to_ast(func)).expand().first_normal().second_normal().alias({})[1])
 
-    print(And(Or(And(Branch(ast.AST), Branch(ast.Name)), Branch(ast.Load)), Branch(ast.Store)).disjunctive_nf())
+    print(And(Or(And(Branch(ast.AST), Branch(ast.Name)), Branch(ast.Load)), Branch(ast.Store)).canonical_nf())
     #
-    # print(And(Branch(ast.AST), Or(Branch(ast.Name), Branch(ast.Load))).disjunctive_normal_form())
+    print(And(Branch(ast.AST), Or(Branch(ast.Name), Branch(ast.Load))).canonical_nf())

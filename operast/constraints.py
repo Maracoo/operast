@@ -2,20 +2,37 @@
 __all__ = ["Ord", "Sibling", "Term"]
 
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from itertools import product
+from typing import Dict, Iterator, List, Set, Tuple, Union
+
+
+_TERM_INSTANCES: Dict[str, 'Term'] = {}
 
 
 class Term:
     """Logical Term"""
 
-    def __init__(self, name: str, value: Optional[Any] = None):
+    __slots__ = "name",
+
+    def __new__(cls, *args, **kwargs):
+        name = args[0] if args else kwargs["name"]
+        if name not in _TERM_INSTANCES:
+            _TERM_INSTANCES[name] = super().__new__(cls)
+        return _TERM_INSTANCES[name]
+
+    def __init__(self, name: str):
         self.name = name
-        self.value = value
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Term):
             return NotImplemented
-        return self.value == other.value
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    def __repr__(self) -> str:
+        return self.name
 
 
 SibElem = Union[Term, 'Sibling']
@@ -31,7 +48,8 @@ class Sibling:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Sibling):
             return NotImplemented
-        return self.index == other.index and all(a == b for a, b in zip(self.elems, other.elems))
+        return (self.index == other.index and
+                all(a == b for a, b in zip(self.elems, other.elems)))
 
     # Rules:
     #   1) Sib(x, A, B) => [Sib(x, A, B)]
@@ -48,30 +66,6 @@ class Sibling:
         return ret
 
 
-class Node:
-    """Helper class for building Ordered DAG"""
-
-    def __init__(self, term: Term):
-        self.term = term
-        self.children: List[Node] = []
-
-    def __repr__(self) -> str:
-        if self.children:
-            children_repr = ', '.join(repr(c) for c in self.children)
-            return f"Node('{self.term.name}', children=[{children_repr}])"
-        return f"Node('{self.term.name}')"
-
-    def add_children(self, children: List['Node']) -> None:
-        self.children.extend(children)
-
-    def to_dag(self) -> Dict[str, Set[str]]:
-        ret = defaultdict(set)
-        for c in self.children:
-            ret[self.term.name].add(c.term.name)
-            ret.update(c.to_dag())
-        return ret
-
-
 OrdElem = Union[Term, 'Ordered', List[Union[Term, 'Ordered']]]
 
 
@@ -81,46 +75,29 @@ class Ord:
     def __init__(self, *elems: OrdElem):
         self.elems = elems
 
-    # Cases:
-    #   1) Ord(A, B) => A -> B
-    #   2) Ord(A, [B, C]) => A -> B, A -> C
-    #   3) Ord([A, B], C) => A -> C, B -> C
-    #   4) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
-    #   5) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
-    #   6) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) => A -> B -> D, A -> C -> D, A -> E
-    #   7) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
-    #       A -> B -> D -> F, A -> C -> D -> F, A -> E -> F
-    def _construct_graph(self) -> Tuple[List[Node], List[Node]]:
-        first: List[Node] = []
-        last: List[Node] = []
+    def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
         for elem in self.elems:
             if isinstance(elem, Term):
-                node = Node(elem)
-                new_first, new_last = [node], [node]
+                yield [(elem.name,)]
             elif isinstance(elem, Ord):
-                new_first, new_last = elem._construct_graph()
-            else:  # elem is List[Union[Term, Ordered]]
-                new_first, new_last = [], []
-                for sub_e in elem:
-                    if isinstance(sub_e, Term):
-                        node = Node(sub_e)
-                        new_first.append(node)
-                        new_last.append(node)
-                    else:  # elem is Ordered
-                        _fst, _lst = sub_e._construct_graph()
-                        new_first.extend(_fst)
-                        new_last.extend(_lst)
-            if not first:
-                first = new_first
-            for node in last:
-                node.add_children(new_first)
-            last = new_last
-        return first, last
+                yield list(elem._paths_product())
+            else:  # elem is List[Union[Term, Ord]]
+                yield [
+                    item_elem for item in elem for item_elem in
+                    (item._paths_product() if isinstance(item, Ord) else [(item.name,)])
+                ]
+
+    def _paths_product(self) -> Iterator[Tuple[str, ...]]:
+        for prod in product(*self._find_paths()):
+            yield tuple(a for b in prod for a in b)
 
     def to_dag(self) -> Dict[str, Set[str]]:
         ret = defaultdict(set)
-        nodes = self._construct_graph()[0]
-        for node in nodes:
-            for term_name, children in node.to_dag().items():
-                ret[term_name].update(children)
+        for links in self._paths_product():
+            for i in range(len(links) - 1):
+                ret[links[i]].add(links[i+1])
         return ret
+
+
+if __name__ == '__main__':
+    print(Ord(Term('A'), [Ord(Term('B1'), Term('M')), Term('C1')], [Term('B2'), Term('C2')], Term('D')).to_dag())

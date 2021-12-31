@@ -15,6 +15,16 @@ class TestSibling:
         assert flattened == result
 
 
+# Cases:
+#   1) Ord(A, B) => A -> B
+#   2) Ord(A, [B, C]) => A -> B, A -> C
+#   3) Ord([A, B], C) => A -> C, B -> C
+#   4) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
+#   5) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
+#   6) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) => A -> B -> D, A -> C -> D, A -> E
+#   7) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
+#       A -> B -> D -> F, A -> C -> D -> F, A -> E -> F
+#
 class TestOrdered:
     #   1) Ord(A, B) => A -> B
     def test_ordered_dag_1(self):
