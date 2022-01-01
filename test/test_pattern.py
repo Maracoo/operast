@@ -1,4 +1,5 @@
 import ast
+import operast.pattern
 from operast.pattern import *
 
 
@@ -242,3 +243,23 @@ class TestCanonicalNormalForm:
             Then(Branch(ast.Name), Branch(ast.Tuple))
         )
         assert result == expected
+
+    def test_canonical_normal_form_invariant_only_one_Or(self):
+        cnf = And(
+            Or(ast.AST, Or(ast.Name)),
+            Branch(
+                ast.Load,
+                Or(ast.Tuple, And(ast.Name, Then(ast.And, Or(ast.AST, ast.Or))))
+            )
+        ).canonical_nf()
+
+        or_count = 0
+        to_check = [cnf]
+        while to_check:
+            elem = to_check.pop()
+            if isinstance(elem, operast.pattern.TreePattern):
+                to_check.extend(elem.elems)
+                if isinstance(elem, Or):
+                    or_count += 1
+
+        assert or_count == 1

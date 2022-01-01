@@ -4,6 +4,7 @@ __all__ = ["And", "Branch", "Or", "StateEff", "Then"]
 import ast
 from abc import ABC, abstractmethod
 from itertools import product
+from operast.constraints import Ord, Sib
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, Union
 
 
@@ -216,12 +217,12 @@ class TreePattern(ABC):
     def pushdown_fieldname(self, name: str) -> None:
         raise NotImplementedError
 
-    @abstractmethod
-    def alias(self, aliases: Aliases) -> Tuple[Aliases, BranchExpr]:
-        raise NotImplementedError
-
     def expand(self) -> 'TreePattern':
         return type(self)(*(tree_elem_expand(e) for e in self.elems))
+
+    @abstractmethod
+    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+        raise NotImplementedError
 
 
 class Branch(TreePattern):
@@ -250,9 +251,8 @@ class Branch(TreePattern):
         else:
             self.elems[0] = (name, first)
 
-    def alias(self, aliases: Aliases) -> Tuple[Aliases, BranchExpr]:
-        aliases[self.id] = self
-        return aliases, self.id
+    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+        yield {self.id: self}, self.id, self.id
 
 
 class ForkPattern(TreePattern, ABC):
@@ -306,21 +306,23 @@ class ForkPattern(TreePattern, ABC):
             else:
                 self.elems[i] = (name, elem)
 
-    def alias(self, aliases: Aliases) -> Tuple[Aliases, BranchExpr]:
-        # expr is an S-Expression
-        expr = [f'{type(self).__name__}_{self.index}']
-        for elem in self.elems:
-            aliases, expr_elem = elem.alias(aliases)
-            # expr.append(expr_elem)
-        return aliases, expr
-
 
 class And(ForkPattern):
-    pass
+    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+        _a, _s, _o = zip(*(next(e.to_exprs()) for e in self.elems))
+        _aliases = {k: v for d in _a for k, v in d.items()}
+        _sib = Sib(self.index, *_s)
+        _ord = Ord(list(_o))
+        yield _aliases, _sib, _ord
 
 
 class Then(ForkPattern):
-    pass
+    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+        _a, _s, _o = zip(*(next(e.to_exprs()) for e in self.elems))
+        _aliases = {k: v for d in _a for k, v in d.items()}
+        _sib = Sib(self.index, *_s)
+        _ord = Ord(*_o)
+        yield _aliases, _sib, _ord
 
 
 class Or(ForkPattern):
@@ -341,3 +343,11 @@ class Or(ForkPattern):
         if len(self_elems) == 1:
             return self_elems[0]
         return self
+
+    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+        for elem in self.elems:
+            yield from elem.to_exprs()
+
+
+if __name__ == '__main__':
+    print(list(Then(ast.AST, And(ast.Name, ast.Load)).canonical_nf().to_exprs()))
