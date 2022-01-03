@@ -1,12 +1,25 @@
 
-__all__ = ["Ord", "Sib"]
+__all__ = ["Ord", "OrdElem", "Partial", "Sib", "SibElem", "Total"]
 
+from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Iterable as Iter
 from itertools import product
-from typing import Dict, Iterator, List, Set, Tuple, Union
+from typing import Dict, Iterable, Iterator, List, Set, Tuple, TypeVar, Union
+
+
+T = TypeVar('T')
 
 
 SibElem = Union[str, 'Sib']
+
+
+def flatten_irregular(it: Iterable[Union[T, Iterable[T]]]) -> Iterator[T]:
+    for i in it:
+        if isinstance(i, Iter) and not isinstance(i, str):
+            yield from i
+        else:
+            yield i
 
 
 class Sib:
@@ -16,13 +29,7 @@ class Sib:
 
     def __init__(self, index: int, *elems: SibElem):
         self.index = index
-        new_elems = []
-        for elem in elems:
-            if isinstance(elem, Sib) and elem.index == self.index:
-                new_elems.extend(elem.elems)
-            else:
-                new_elems.append(elem)
-        self.elems = new_elems
+        self.elems: List[SibElem] = list(self._flatten(elems))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Sib):
@@ -30,27 +37,34 @@ class Sib:
         return (self.index == other.index and
                 all(a == b for a, b in zip(self.elems, other.elems)))
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         elem_reprs = ', '.join(repr(e) for e in self.elems)
-        return f"Sib(index={self.index}, {elem_reprs})"
+        return f"{type(self).__name__}(index={self.index}, {elem_reprs})"
+
+    def _flatten(self, elems: Tuple[SibElem]) -> Iterator[SibElem]:
+        for elem in elems:
+            if isinstance(elem, Sib) and elem.index == self.index:
+                yield from elem.elems
+            else:
+                yield elem
 
     # Rules:
     #   1) Sib(x, A, B) => [Sib(x, A, B)]
     #   2) Sib(x, A, Sib(y, B, C)) => [Sib(x, A, B), Sib(y, B, C)]
-    def flatten(self) -> List['Sib']:
+    def constraint(self) -> List['Sib']:
         ret = [self]
         for i, elem, in enumerate(self.elems):
             if isinstance(elem, Sib):
-                flattened = elem.flatten()
+                flattened = elem.constraint()
                 ret.extend(flattened)
                 self.elems[i] = flattened[0].elems[0]
         return ret
 
 
-OrdElem = Union[str, 'Ord', List[Union[str, 'Ord']]]
+OrdElem = Union[str, 'Ord']
 
 
-class Ord:
+class Ord(ABC):
     """Constraint for tree node order"""
 
     __slots__ = "elems",
@@ -58,25 +72,17 @@ class Ord:
     def __init__(self, *elems: OrdElem):
         self.elems = elems
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         elem_reprs = ', '.join(repr(e) for e in self.elems)
-        return f"Ord({elem_reprs})"
+        return f"{type(self).__name__}({elem_reprs})"
 
+    @abstractmethod
     def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
-        for elem in self.elems:
-            if isinstance(elem, str):
-                yield [(elem,)]
-            elif isinstance(elem, Ord):
-                yield list(elem._paths_product())
-            else:  # elem is List[Union[Term, Ord]]
-                yield [
-                    item_elem for item in elem for item_elem in
-                    (item._paths_product() if isinstance(item, Ord) else [(item,)])
-                ]
+        raise NotImplementedError
 
     def _paths_product(self) -> Iterator[Tuple[str, ...]]:
         for prod in product(*self._find_paths()):
-            yield tuple(a for b in prod for a in b)
+            yield tuple(flatten_irregular(prod))
 
     def to_dag(self) -> Dict[str, Set[str]]:
         dag = defaultdict(set)
@@ -84,3 +90,15 @@ class Ord:
             for i in range(len(links) - 1):
                 dag[links[i]].add(links[i+1])
         return dag
+
+
+class Total(Ord):
+    def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
+        for e in self.elems:
+            yield [e] if isinstance(e, str) else list(e._paths_product())
+
+
+class Partial(Ord):
+    def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
+        paths = (e._paths_product() if isinstance(e, Ord) else e for e in self.elems)
+        yield list(flatten_irregular(paths))

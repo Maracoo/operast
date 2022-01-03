@@ -3,25 +3,25 @@ from operast.constraints import *
 
 class TestSibling:
     #   1) Sib(x, A, B) -> [Sib(x, A, B)]
-    def test_sibling_flatten_1(self):
-        flattened = Sib(0, 'A', 'B').flatten()
+    def test_sibling_constraint_1(self):
+        constrained = Sib(0, 'A', 'B').constraint()
         result = [Sib(0, 'A', 'B')]
-        assert flattened == result
+        assert constrained == result
 
     #   2) Sib(x, A, Sib(y, B, C)) -> [Sib(x, A, B), Sib(y, B, C)]
-    def test_sibling_flatten_2(self):
-        flattened = Sib(0, 'A', Sib(1, 'B', 'C')).flatten()
+    def test_sibling_constraint_2(self):
+        constrained = Sib(0, 'A', Sib(1, 'B', 'C')).constraint()
         result = [Sib(0, 'A', 'B'), Sib(1, 'B', 'C')]
-        assert flattened == result
+        assert constrained == result
 
-    def test_sibling_flatten_complex(self):
-        flattened = Sib(0, Sib(1, 'A', 'D'), Sib(1, 'B', 'C')).flatten()
+    def test_sibling_constraint_complex(self):
+        constrained = Sib(0, Sib(1, 'A', 'D'), Sib(1, 'B', 'C')).constraint()
         result = [
             Sib(0, 'A', 'B'),
             Sib(1, 'A', 'D'),
             Sib(1, 'B', 'C')
         ]
-        assert flattened == result
+        assert constrained == result
 
 
 # Cases:
@@ -40,74 +40,66 @@ class TestSibling:
 class TestOrdered:
     #   1) Ord(A, B) => A -> B
     def test_ordered_dag_1(self):
-        dag = Ord('A', 'B').to_dag()
+        dag = Total('A', 'B').to_dag()
         result = {'A': {'B'}}
         assert dag == result
 
     #   2) Ord(A, Ord(B, C)) => A -> B -> C
     def test_ordered_dag_2(self):
-        dag = Ord('A', Ord('B', 'C')).to_dag()
+        dag = Total('A', Total('B', 'C')).to_dag()
         result = {'A': {'B'}, 'B': {'C'}}
         assert dag == result
 
     #   3) Ord(A, [B, C]) => A -> B, A -> C
     def test_ordered_dag_3(self):
-        dag = Ord('A', ['B', 'C']).to_dag()
+        dag = Total('A', Partial('B', 'C')).to_dag()
         result = {'A': {'B', 'C'}}
         assert dag == result
 
     #   4) Ord([A, B], C) => A -> C, B -> C
     def test_ordered_dag_4(self):
-        dag = Ord(['A', 'B'], 'C').to_dag()
+        dag = Total(Partial('A', 'B'), 'C').to_dag()
         result = {'A': {'C'}, 'B': {'C'}}
         assert dag == result
 
     #   5) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
     def test_ordered_dag_5(self):
-        dag = Ord('A', [Ord('B', 'C'), 'D']).to_dag()
+        dag = Total('A', Partial(Total('B', 'C'), 'D')).to_dag()
         result = {'A': {'B', 'D'}, 'B': {'C'}}
         assert dag == result
 
     #   6) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
     def test_ordered_dag_6(self):
-        dag = Ord(['A', Ord('B', 'C')], 'D').to_dag()
+        dag = Total(Partial('A', Total('B', 'C')), 'D').to_dag()
         result = {'A': {'D'}, 'B': {'C'}, 'C': {'D'}}
         assert dag == result
 
     #   7) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) =>
     #       A -> B -> D, A -> C -> D, A -> E
     def test_ordered_dag_7(self):
-        dag = Ord('A', [Ord(['B', 'C'], 'D'), 'E']).to_dag()
+        dag = Total('A', Partial(Total(Partial('B', 'C'), 'D'), 'E')).to_dag()
         result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}}
         assert dag == result
 
     #   8) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
     #       A -> B -> D -> F, A -> C -> D -> F, A -> E -> F
     def test_ordered_dag_8(self):
-        dag = Ord('A', [Ord(['B', 'C'], 'D'), 'E'], 'F').to_dag()
+        dag = Total('A', Partial(Total(Partial('B', 'C'), 'D'), 'E'), 'F').to_dag()
         result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}, 'D': {'F'}, 'E': {'F'}}
         assert dag == result
 
     #   9) Ord([A, B]) => A, B
     def test_ordered_dag_9(self):
-        dag = Ord(['A', 'B']).to_dag()
+        dag = Partial('B', 'C').to_dag()
         result = {}
         assert dag == result
 
     def test_ord_dag_complex_1(self):
-        dag = Ord('A', Ord(['B', 'C'])).to_dag()
-        expected = {'A': {'B', 'C'}}
-        assert dag == expected
-
-        dag2 = Ord('A', ['B', 'C']).to_dag()
-        assert dag == dag2
-
-    def test_ord_dag_complex_2(self):
-        dag = Ord(
+        dag = Total(
             'A',
-            Ord('N1', 'N2'),
-            ['B1', 'C1'],
-            ['B2', 'C2'],
+            Total('N1', 'N2'),
+            Partial('B1', 'C1'),
+            Partial('B2', 'C2'),
             'D'
         ).to_dag()
 

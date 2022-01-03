@@ -4,7 +4,7 @@ __all__ = ["And", "Branch", "Or", "StateEff", "Then"]
 import ast
 from abc import ABC, abstractmethod
 from itertools import product
-from operast.constraints import Ord, Sib
+from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, Union
 
 
@@ -30,7 +30,6 @@ PatternElem = Union[
     Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
 ]
 TreeElem = Union['TreePattern', PatternElem]
-BranchExpr = Union[str, List['BranchExpr']]
 Aliases = Dict[str, 'Branch']
 
 
@@ -63,13 +62,13 @@ def ast_expand_cases(name: str, elem: Any) -> Optional[TreeElem]:
 def ast_expand(node: ast.AST) -> Optional['TreePattern']:
     # possible elements inside the fields of an AST node:
     # ast.AST, Type[ast.AST], BranchPattern
-    and_elements = []
+    and_elements: List[TreeElem] = []
     for name, field in iter_all_ast_fields(node):
         if isinstance(field, list):
             then_elements = []
             non_expand_elements = []
             for item in field:
-                expanded = ast_expand_cases(name, item)
+                expanded: Optional[TreeElem] = ast_expand_cases(name, item)
                 if expanded is None:
                     non_expand_elements.append(item)
                 else:
@@ -134,6 +133,8 @@ def pattern_elem_equals(a: PatternElem, b: PatternElem) -> bool:
         return a is b
     # case: StateEff
     if isinstance(a, StateEff) and isinstance(b, StateEff):
+        if isinstance(a.node, type):
+            return a.node is b.node
         return ast_equals(a.node, b.node)
     return False
 
@@ -221,7 +222,7 @@ class TreePattern(ABC):
         return type(self)(*(tree_elem_expand(e) for e in self.elems))
 
     @abstractmethod
-    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         raise NotImplementedError
 
 
@@ -251,7 +252,7 @@ class Branch(TreePattern):
         else:
             self.elems[0] = (name, first)
 
-    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         yield {self.id: self}, self.id, self.id
 
 
@@ -261,6 +262,10 @@ class ForkPattern(TreePattern, ABC):
     def __init__(self, *elems: TreeElem) -> None:
         super().__init__(*elems)
         self.index: int = 0
+
+    @property
+    def ord_builder(self) -> Type[Ord]:
+        return Total
 
     def canonical_nf(self, index: int = 0, *elems: TreeElem) -> TreePattern:
         self.index = index
@@ -306,23 +311,22 @@ class ForkPattern(TreePattern, ABC):
             else:
                 self.elems[i] = (name, elem)
 
+    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+        alias_iter, sib_iter, ord_iter = zip(*(next(e.to_exprs()) for e in self.elems))
+        aliases = {k: v for d in alias_iter for k, v in d.items()}
+        sib = Sib(self.index, *sib_iter)
+        ord_ = self.ord_builder(*ord_iter)
+        yield aliases, sib, ord_
+
 
 class And(ForkPattern):
-    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
-        _a, _s, _o = zip(*(next(e.to_exprs()) for e in self.elems))
-        _aliases = {k: v for d in _a for k, v in d.items()}
-        _sib = Sib(self.index, *_s)
-        _ord = Ord(list(_o))
-        yield _aliases, _sib, _ord
+    @property
+    def ord_builder(self) -> Type[Ord]:
+        return Partial
 
 
 class Then(ForkPattern):
-    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
-        _a, _s, _o = zip(*(next(e.to_exprs()) for e in self.elems))
-        _aliases = {k: v for d in _a for k, v in d.items()}
-        _sib = Sib(self.index, *_s)
-        _ord = Ord(*_o)
-        yield _aliases, _sib, _ord
+    pass
 
 
 class Or(ForkPattern):
@@ -344,10 +348,11 @@ class Or(ForkPattern):
             return self_elems[0]
         return self
 
-    def to_exprs(self) -> Iterator[Tuple[Aliases, Union[Sib, str], Union[Ord, str]]]:
+    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         for elem in self.elems:
             yield from elem.to_exprs()
 
 
 if __name__ == '__main__':
-    print(list(Then(ast.AST, And(ast.Name, ast.Load)).canonical_nf().to_exprs()))
+    aa, ss, oo = (next(Then(ast.AST, And(ast.Name, ast.Load)).canonical_nf().to_exprs()))
+    print(aa, ss.constraint(), oo, oo.to_dag())
