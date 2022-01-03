@@ -1,4 +1,4 @@
-import ast
+
 import operast.pattern
 from operast.pattern import *
 
@@ -36,195 +36,188 @@ class TestCanonicalNormalForm:
 
     #   1) Branch(x1, ..., xn, Branch(y1, ..., yn)) => Branch(x1, ..., xn, y1, ..., yn)
     def test_canonical_nf_1(self):
-        result = Branch(ast.AST, ast.Name, Branch(ast.AST, ast.Load)).canonical_nf()
-        expected = Branch(ast.AST, ast.Name, ast.AST, ast.Load)
+        result = Branch('A', 'B', Branch('C', 'D')).canonical_nf()
+        expected = Branch('A', 'B', 'C', 'D')
         assert result == expected
 
     #   2) Branch(x1, ..., xn, Fa(y1, ..., yn)) => Fa(Branch(x1, ..., xn, y1), ..., Branch(x1, ..., xn, yn))
     def test_And_canonical_nf_2(self):
-        result = Branch(ast.AST, And(ast.AST, ast.Load)).canonical_nf()
-        expected = And(Branch(ast.AST, ast.AST), Branch(ast.AST, ast.Load))
+        result = Branch('A', And('B', 'C')).canonical_nf()
+        expected = And(Branch('A', 'B'), Branch('A', 'C'))
         assert result == expected
 
     #   2) Branch(x1, ..., xn, Fa(y1, ..., yn)) => Fa(Branch(x1, ..., xn, y1), ..., Branch(x1, ..., xn, yn))
     def test_Then_canonical_nf_2(self):
-        result = Branch(ast.AST, Then(ast.AST, ast.Load)).canonical_nf()
-        expected = Then(Branch(ast.AST, ast.AST), Branch(ast.AST, ast.Load))
+        result = Branch('A', Then('B', 'C')).canonical_nf()
+        expected = Then(Branch('A', 'B'), Branch('A', 'C'))
         assert result == expected
 
     #   2) Branch(x1, ..., xn, Fa(y1, ..., yn)) => Fa(Branch(x1, ..., xn, y1), ..., Branch(x1, ..., xn, yn))
     def test_Or_canonical_nf_2(self):
-        result = Branch(ast.AST, Or(ast.AST, ast.Load)).canonical_nf()
-        expected = Or(Branch(ast.AST, ast.AST), Branch(ast.AST, ast.Load))
+        result = Branch('A', Or('B', 'C')).canonical_nf()
+        expected = Or(Branch('A', 'B'), Branch('A', 'C'))
         assert result == expected
 
     #   2) Branch(x1, ..., xn, Fa(y1, ..., yn)) => Fa(Branch(x1, ..., xn, y1), ..., Branch(x1, ..., xn, yn))
     def test_canonical_nf_2_extra(self):
-        result = Branch(ast.AST, And(Branch(ast.Name, ast.Store), Branch(ast.Load))).canonical_nf()
-        expected = And(Branch(ast.AST, ast.Name, ast.Store), Branch(ast.AST, ast.Load))
+        result = Branch('A', And(Branch('B', 'C'), Branch('D'))).canonical_nf()
+        expected = And(Branch('A', 'B', 'C'), Branch('A', 'D'))
         assert result == expected
         assert isinstance(result, And)
         assert result.index == 1
 
     #   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
     def test_Branch_canonical_nf_3(self):
-        result = Branch(Branch(ast.AST, ast.Load)).canonical_nf()
-        expected = Branch(ast.AST, ast.Load)
+        result = Branch(Branch('A', 'B')).canonical_nf()
+        expected = Branch('A', 'B')
         assert result == expected
 
     #   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
     def test_And_canonical_nf_3(self):
-        result = And(And(Branch(ast.AST), Branch(ast.Load))).canonical_nf()
-        expected = And(Branch(ast.AST), Branch(ast.Load))
+        result = And(And(Branch('A'), Branch('B'))).canonical_nf()
+        expected = And(Branch('A'), Branch('B'))
         assert result == expected
 
     #   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
     def test_Then_canonical_nf_3(self):
-        result = Then(Then(Branch(ast.AST), Branch(ast.Load))).canonical_nf()
-        expected = Then(Branch(ast.AST), Branch(ast.Load))
+        result = Then(Then(Branch('A'), Branch('B'))).canonical_nf()
+        expected = Then(Branch('A'), Branch('B'))
         assert result == expected
 
     #   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
     def test_Or_canonical_nf_3(self):
-        result = Or(Or(Branch(ast.AST), Branch(ast.Load))).canonical_nf()
-        expected = Or(Branch(ast.AST), Branch(ast.Load))
+        result = Or(Or(Branch('A'), Branch('B'))).canonical_nf()
+        expected = Or(Branch('A'), Branch('B'))
         assert result == expected
 
     #   4) Fa(x1, ..., xn) => Fa(f(x1), ..., f(xn))
     def test_And_canonical_nf_4(self):
-        result = And(ast.AST, ast.Load).canonical_nf()
-        expected = And(Branch(ast.AST), Branch(ast.Load))
+        result = And('A', 'B').canonical_nf()
+        expected = And(Branch('A'), Branch('B'))
         assert result == expected
 
     #   4) Fa(x1, ..., xn) => Fa(f(x1), ..., f(xn))
     def test_Then_canonical_nf_4(self):
-        result = Then(ast.AST, ast.Load).canonical_nf()
-        expected = Then(Branch(ast.AST), Branch(ast.Load))
+        result = Then('A', 'B').canonical_nf()
+        expected = Then(Branch('A'), Branch('B'))
         assert result == expected
 
     #   4) Fa(x1, ..., xn) => Fa(f(x1), ..., f(xn))
     def test_Or_canonical_nf_4(self):
-        result = Or(ast.AST, ast.Load).canonical_nf()
-        expected = Or(Branch(ast.AST), Branch(ast.Load))
+        result = Or('A', 'B').canonical_nf()
+        expected = Or(Branch('A'), Branch('B'))
         assert result == expected
 
     #   5) Fa(x) => Branch(x)
     def test_And_canonical_nf_5(self):
-        result = And(ast.AST).canonical_nf()
-        expected = Branch(ast.AST)
+        result = And('A').canonical_nf()
+        expected = Branch('A')
         assert result == expected
 
     #   5) Fa(x) => Branch(x)
     def test_Then_canonical_nf_5(self):
-        result = Then(ast.AST).canonical_nf()
-        expected = Branch(ast.AST)
+        result = Then('A').canonical_nf()
+        expected = Branch('A')
         assert result == expected
 
     #   5) Fa(x) => Branch(x)
     def test_Or_canonical_nf_5(self):
-        result = Or(ast.AST).canonical_nf()
-        expected = Branch(ast.AST)
+        result = Or('A').canonical_nf()
+        expected = Branch('A')
         assert result == expected
 
     #   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
     #       iff Fa.index == Fb.index
     def test_And_canonical_nf_6_same_index(self):
-        result = And(Branch(ast.AST), And(Branch(ast.Load), Branch(ast.Store))).canonical_nf()
-        expected = And(Branch(ast.AST), Branch(ast.Load), Branch(ast.Store))
+        result = And(Branch('A'), And(Branch('B'), Branch('C'))).canonical_nf()
+        expected = And(Branch('A'), Branch('B'), Branch('C'))
         assert result == expected
 
     #   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
     #       iff Fa.index != Fb.index
     def test_And_canonical_nf_6_diff_index(self):
-        result = And(ast.AST, Branch(ast.Name, And(ast.Load, ast.Store))).canonical_nf()
-        expected = And(Branch(ast.AST), And(Branch(ast.Name, ast.Load), Branch(ast.Name, ast.Store)))
+        result = And('A', Branch('B', And('C', 'D'))).canonical_nf()
+        expected = And(Branch('A'), And(Branch('B', 'C'), Branch('B', 'D')))
         assert result == expected
 
     #   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
     #       iff Fa.index == Fb.index
     def test_Then_canonical_nf_6_same_index(self):
-        result = Then(Branch(ast.AST), Then(Branch(ast.Load), Branch(ast.Store))).canonical_nf()
-        expected = Then(Branch(ast.AST), Branch(ast.Load), Branch(ast.Store))
+        result = Then(Branch('A'), Then(Branch('B'), Branch('C'))).canonical_nf()
+        expected = Then(Branch('A'), Branch('B'), Branch('C'))
         assert result == expected
 
     #   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
     #       iff Fa.index != Fb.index
     def test_Then_canonical_nf_6_diff_index(self):
-        result = Then(ast.AST, Branch(ast.Name, Then(ast.Load, ast.Store))).canonical_nf()
-        expected = Then(Branch(ast.AST), Then(Branch(ast.Name, ast.Load), Branch(ast.Name, ast.Store)))
+        result = Then('A', Branch('B', Then('C', 'D'))).canonical_nf()
+        expected = Then(Branch('A'), Then(Branch('B', 'C'), Branch('B', 'D')))
         assert result == expected
 
     # Or does not track index
     #   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
     #       iff Fa is Or and Fb is Or
     def test_Or_canonical_nf_6_same_index(self):
-        result = Or(Branch(ast.AST), Or(Branch(ast.Load), Branch(ast.Store))).canonical_nf()
-        expected = Or(Branch(ast.AST), Branch(ast.Load), Branch(ast.Store))
+        result = Or(Branch('A'), Or(Branch('B'), Branch('C'))).canonical_nf()
+        expected = Or(Branch('A'), Branch('B'), Branch('C'))
         assert result == expected
 
     # Or does not track index
     #   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
     #       iff Fa is Or and Fb is Or
     def test_Or_canonical_nf_6_diff_index(self):
-        result = Or(ast.AST, Branch(ast.Name, Or(ast.Load, ast.Store))).canonical_nf()
-        expected = Or(Branch(ast.AST), Branch(ast.Name, ast.Load), Branch(ast.Name, ast.Store))
+        result = Or('A', Branch('B', Or('C', 'D'))).canonical_nf()
+        expected = Or(Branch('A'), Branch('B', 'C'), Branch('B', 'D'))
         assert result == expected
 
     #   7) And(x, Or(y1, y2)) => Or(And(x, y1), And(x, y2))
     def test_canonical_nf_7(self):
-        result = And(Branch(ast.AST), Or(ast.Load, ast.Store)).canonical_nf()
-        expected = Or(And(Branch(ast.AST), Branch(ast.Load)), And(Branch(ast.AST), Branch(ast.Store)))
+        result = And(Branch('A'), Or('B', 'C')).canonical_nf()
+        expected = Or(And(Branch('A'), Branch('B')), And(Branch('A'), Branch('C')))
         assert result == expected
 
     #   8) Then(x, Or(y1, y2)) => Or(Then(x, y1), Then(x, y2))
     def test_canonical_nf_8(self):
-        result = Then(Branch(ast.AST), Or(ast.Load, ast.Store)).canonical_nf()
-        expected = Or(Then(Branch(ast.AST), Branch(ast.Load)), Then(Branch(ast.AST), Branch(ast.Store)))
+        result = Then(Branch('A'), Or('B', 'C')).canonical_nf()
+        expected = Or(Then(Branch('A'), Branch('B')), Then(Branch('A'), Branch('C')))
         assert result == expected
 
     def test_complex_canonical_nf_A(self):
-        result = And(Or(Then(Or(And(ast.AST))))).canonical_nf()
-        expected = Branch(ast.AST)
+        result = And(Or(Then(Or(And('A'))))).canonical_nf()
+        expected = Branch('A')
         assert result == expected
 
     def test_complex_canonical_nf_B(self):
-        pat = Branch(ast.AST, Then(ast.AST, Then(ast.Name, Or(ast.Load, ast.Store))))
+        pat = Branch('A', Then('A', Then('B', Or('C', 'D'))))
         result = pat.canonical_nf()
         expected = Or(
             Then(
-                Branch(ast.AST, ast.AST),
-                Branch(ast.AST, ast.Name),
-                Branch(ast.AST, ast.Load)
+                Branch('A', 'A'),
+                Branch('A', 'B'),
+                Branch('A', 'C')
             ),
             Then(
-                Branch(ast.AST, ast.AST),
-                Branch(ast.AST, ast.Name),
-                Branch(ast.AST, ast.Store)
+                Branch('A', 'A'),
+                Branch('A', 'B'),
+                Branch('A', 'D')
             )
         )
         assert result == expected
 
     def test_complex_canonical_nf_C(self):
-        result = And(ast.AST, Or(And(ast.Name, ast.expr))).canonical_nf()
-        expected = And(Branch(ast.AST), Branch(ast.Name), Branch(ast.expr))
+        result = And('A', Or(And('B', 'C'))).canonical_nf()
+        expected = And(Branch('A'), Branch('B'), Branch('C'))
         assert result == expected
 
     def test_complex_canonical_nf_D(self):
         result = Branch(
-            ast.AST,
-            Branch(
-                ast.AST,
-                And(
-                    ast.Name,
-                    Branch(ast.expr, And(ast.Load, ast.Store))
-                )
-            )
+            'A', Branch('A', And('B', Branch('C', And('D', 'E'))))
         ).canonical_nf()
         expected = And(
-            Branch(ast.AST, ast.AST, ast.Name),
+            Branch('A', 'A', 'B'),
             And(
-                Branch(ast.AST, ast.AST, ast.expr, ast.Load),
-                Branch(ast.AST, ast.AST, ast.expr, ast.Store)
+                Branch('A', 'A', 'C', 'D'),
+                Branch('A', 'A', 'C', 'E')
             )
         )
         assert isinstance(result, And)
@@ -233,24 +226,21 @@ class TestCanonicalNormalForm:
 
     def test_complex_canonical_nf_E(self):
         result = Then(
-            Or(Branch(ast.AST), Branch(ast.Name)),
-            Or(Branch(ast.List), Branch(ast.Tuple))
+            Or(Branch('A'), Branch('B')),
+            Or(Branch('C'), Branch('D'))
         ).canonical_nf()
         expected = Or(
-            Then(Branch(ast.AST), Branch(ast.List)),
-            Then(Branch(ast.AST), Branch(ast.Tuple)),
-            Then(Branch(ast.Name), Branch(ast.List)),
-            Then(Branch(ast.Name), Branch(ast.Tuple))
+            Then(Branch('A'), Branch('C')),
+            Then(Branch('A'), Branch('D')),
+            Then(Branch('B'), Branch('C')),
+            Then(Branch('B'), Branch('D'))
         )
         assert result == expected
 
     def test_canonical_nf_invariant_only_one_Or(self):
         cnf = And(
-            Or(ast.AST, Or(ast.Name)),
-            Branch(
-                ast.Load,
-                Or(ast.Tuple, And(ast.Name, Then(ast.And, Or(ast.AST, ast.Or))))
-            )
+            Or('A', Or('B')),
+            Branch('C', Or('D', And('B', Then('E', Or('A', 'F')))))
         ).canonical_nf()
 
         or_count = 0

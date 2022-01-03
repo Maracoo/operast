@@ -1,190 +1,123 @@
 
-__all__ = ["And", "Branch", "Or", "StateEff", "Then"]
-
-import ast
-from abc import ABC, abstractmethod
-from itertools import product
-from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, Union
-
-
-# noinspection PyProtectedMember
-def get_all_ast_fields() -> Set[str]:
-    return {field for obj in ast.__dict__.values() if isinstance(obj, type) and
-            issubclass(obj, ast.AST) for field in obj._fields}
-
-
-PY_AST_FIELDS = get_all_ast_fields()
-
-
-class StateEff:
-    def __init__(self, node: Union[ast.AST, Type[ast.AST]]):
-        self.node = node
-
-    def __repr__(self) -> str:
-        return f'{type(self).__name__}({tree_elem_repr(self.node)})'
-
-
-PatternElem = Union[
-    ast.AST, Type[ast.AST], StateEff,
-    Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
+__all__ = [
+    "EXTENSIONS",
+    "And",
+    "Branch",
+    "Or",
+    "StateEff",
+    "Then",
+    "TreeElem",
+    "TreePattern",
+    "tree_elem_expand"
 ]
-TreeElem = Union['TreePattern', PatternElem]
-Aliases = Dict[str, 'Branch']
+
+from abc import ABC, abstractmethod
+from itertools import product, zip_longest
+from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
+from typing import Callable, Dict, Generic, Iterable, Iterator, \
+    List, Tuple, Type, TypeVar, Union
+
+T = TypeVar('T')
 
 
-def iter_all_ast_fields(node: ast.AST) -> Iterator[Tuple[str, Any]]:
-    for field in PY_AST_FIELDS:
-        try:
-            yield field, getattr(node, field)
-        except AttributeError:
-            pass
-
-
-def ast_expand_cases(name: str, elem: Any) -> Optional[TreeElem]:
-    # case: ast.AST
-    if isinstance(elem, ast.AST):
-        pat = ast_expand(elem)
-        return (name, elem) if pat is None else Branch((name, elem), pat)
-    # case: Type[ast.AST]
-    if isinstance(elem, type) and issubclass(elem, ast.AST):
-        return name, elem
-    # case: TreePattern
-    if isinstance(elem, TreePattern):
-        elem.pushdown_fieldname(name)
-        return elem.expand()
-    # case: StateEff
-    if isinstance(elem, StateEff):
-        return name, elem
-    return None
-
-
-def ast_expand(node: ast.AST) -> Optional['TreePattern']:
-    # possible elements inside the fields of an AST node:
-    # ast.AST, Type[ast.AST], BranchPattern
-    and_elements: List[TreeElem] = []
-    for name, field in iter_all_ast_fields(node):
-        if isinstance(field, list):
-            then_elements = []
-            non_expand_elements = []
-            for item in field:
-                expanded: Optional[TreeElem] = ast_expand_cases(name, item)
-                if expanded is None:
-                    non_expand_elements.append(item)
-                else:
-                    then_elements.append(expanded)
-
-            if then_elements:
-                and_elements.append(Then(*then_elements))
-                if non_expand_elements:
-                    setattr(node, name, non_expand_elements)
-                else:
-                    delattr(node, name)
-        else:
-            expanded = ast_expand_cases(name, field)
-            if expanded is not None:
-                and_elements.append(expanded)
-                delattr(node, name)
-
-    if and_elements:
-        return And(*and_elements)
-    return None
-
-
-def tree_elem_expand(elem: TreeElem) -> TreeElem:
-    # case: Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
-    if isinstance(elem, tuple):
-        name, node = elem
-        expanded = tree_elem_expand(node)
-        if isinstance(expanded, TreePattern):
-            expanded.pushdown_fieldname(name)
-            return expanded
-        return name, expanded
-    # case: ast.AST
-    if isinstance(elem, ast.AST):
-        pat = ast_expand(elem)
-        return elem if pat is None else Branch(elem, pat)
-    # case: Type[ast.AST]
-    if isinstance(elem, type) and issubclass(elem, ast.AST):
-        return elem
-    # case: StateEff
-    if isinstance(elem, StateEff):
-        return elem
-    # case: BranchPattern
-    if isinstance(elem, TreePattern):
-        return elem.expand()
-
-
-def ast_equals(a: ast.AST, b: ast.AST) -> bool:
-    return (type(a) is type(b) and len(a.__dict__) == len(b.__dict__) and
-            all(i == j for i, j in zip(iter_all_ast_fields(a), iter_all_ast_fields(b))))
-
-
-def pattern_elem_equals(a: PatternElem, b: PatternElem) -> bool:
-    # case: Tuple[str, Union[ast.AST, Type[ast.AST], StateEff]]
-    if isinstance(a, tuple) and isinstance(b, tuple):
-        (label_a, elem_a), (label_b, elem_b) = a, b
-        return label_a == label_b and pattern_elem_equals(elem_a, elem_b)
-    # case: ast.AST
-    if isinstance(a, ast.AST) and isinstance(b, ast.AST):
-        return ast_equals(a, b)
-    # case: Type[ast.AST]
-    if isinstance(a, type) and isinstance(b, type):
-        return a is b
-    # case: StateEff
-    if isinstance(a, StateEff) and isinstance(b, StateEff):
-        if isinstance(a.node, type):
-            return a.node is b.node
-        return ast_equals(a.node, b.node)
-    return False
-
-
-def tree_elem_equals(a: TreeElem, b: TreeElem) -> bool:
-    if isinstance(a, TreePattern):
-        return (type(a) is type(b) and len(a) == len(b) and
-                all(tree_elem_equals(i, j) for i, j in zip(a, b)))
-    return pattern_elem_equals(a, b)
-
-
-def ast_repr(node: ast.AST) -> str:
-    field_reprs = ', '.join(f'{f}={repr(v)}' for f, v in iter_all_ast_fields(node))
-    return f'{type(node).__name__}({field_reprs})'
-
-
-def tree_elem_repr(a: TreeElem) -> str:
-    if isinstance(a, TreePattern) or isinstance(a, StateEff):
-        return repr(a)
-    if isinstance(a, tuple):
-        label, elem = a
-        return f"('{label}', {tree_elem_repr(elem)})"
-    if isinstance(a, ast.AST):
-        return ast_repr(a)
-    if isinstance(a, type):
-        return a.__name__
-    return ''
-
-
-class TreePattern(ABC):
-    __slots__ = 'elems',
-
-    def __init__(self, *elems: TreeElem) -> None:
-        if not elems:
-            raise ValueError(f"{type(self).__name__} cannot be empty.")
-        self.elems: List[TreeElem] = list(elems)
+class StateEff(Generic[T]):
+    def __init__(self, elem: T):
+        self.elem = elem
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, TreePattern) and tree_elem_equals(self, other)
+        if not isinstance(other, StateEff):
+            return NotImplemented
+        return tree_elem_equals(self, other)
+
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}({tree_elem_repr(self.elem)})'
+
+
+TreeElem = Union['TreePattern', StateEff, T]
+Aliases = Dict[str, 'Branch']
+
+EXTENSIONS: Dict[type, Dict[str, Callable]] = {
+    str: {
+        'expand': lambda x: x,
+        '__eq__': str.__eq__,
+        '__repr__': str.__repr__,
+    }
+}
+
+
+def _extension_type(t: T) -> type:
+    for typ in EXTENSIONS:
+        if (isinstance(t, type) and issubclass(t, typ)) or isinstance(t, typ):
+            return typ
+        if isinstance(t, tuple):
+            for i in t:
+                return _extension_type(i)
+    raise ValueError(f"No type of {t} found in extensions.")
+
+
+def get_extension_func(t: T, name: str) -> Callable:
+    return EXTENSIONS[_extension_type(t)][name]
+
+
+def _extension_expand(t: T) -> Callable[[T], TreeElem[T]]:
+    return get_extension_func(t, 'expand')
+
+
+def _extension_eq(t: T) -> Callable[[T, T], bool]:
+    return get_extension_func(t, '__eq__')
+
+
+def _extension_repr(t: T) -> Callable[[T], str]:
+    return get_extension_func(t, '__repr__')
+
+
+def tree_elem_expand(elem: TreeElem[T]) -> TreeElem[T]:
+    if isinstance(elem, StateEff):
+        elem.elem = tree_elem_expand(elem.elem)
+        return elem
+    if isinstance(elem, TreePattern):
+        for i, e in enumerate(elem.elems):
+            elem.elems[i] = tree_elem_expand(e)
+        return elem
+    return _extension_expand(elem)(elem)
+
+
+def tree_elem_equals(elem_a: TreeElem[T], elem_b: TreeElem[T]) -> bool:
+    if isinstance(elem_a, (TreePattern, StateEff)):
+        return elem_a == elem_b
+    return _extension_eq(elem_a)(elem_a, elem_b)
+
+
+def tree_elem_repr(elem: TreeElem[T]) -> str:
+    if isinstance(elem, (TreePattern, StateEff)):
+        return repr(elem)
+    return _extension_repr(elem)(elem)
+
+
+class TreePattern(ABC, Generic[T]):
+    __slots__ = 'elems',
+
+    def __init__(self, *elems: TreeElem[T]) -> None:
+        if not elems:
+            raise ValueError(f"{type(self).__name__} cannot be empty.")
+        self.elems: List[TreeElem[T]] = list(elems)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TreePattern):
+            return NotImplemented
+        zipped = zip_longest(self.elems, other.elems, fillvalue=None)
+        return type(self) is type(other) and all(tree_elem_equals(i, j) for i, j in zipped)
 
     def __len__(self) -> int:
         return len(self.elems)
 
-    def __iter__(self) -> Iterator[TreeElem]:
+    def __iter__(self) -> Iterator[TreeElem[T]]:
         yield from self.elems
 
-    def __getitem__(self, item: int) -> TreeElem:
+    def __getitem__(self, item: int) -> TreeElem[T]:
         return self.elems[item]
 
-    def __setitem__(self, key: int, value: Union[TreeElem, Iterable[TreeElem]]) -> None:
+    def __setitem__(self, key: int, value: Union[TreeElem[T], Iterable[TreeElem[T]]]) -> None:
         self.elems[key] = value
 
     def __repr__(self) -> str:
@@ -195,7 +128,7 @@ class TreePattern(ABC):
     #   f(x) = Branch(x)    when x is not a TreePattern
     #   f(x) = x            otherwise
     #
-    # Let x, y ∈ TreeElem, and let n ∈ ℕ.
+    # Let x, y ∈ TreeElem[T], and let n ∈ ℕ.
     # Let Ta, Tb, ... ∈ TreePattern, and let Fa, Fb, ... ∈ ForkPattern.
     # Then, given concrete TreePattern classes Branch, And, Then and Or, we
     # have rewrite rules:
@@ -211,15 +144,8 @@ class TreePattern(ABC):
     #   8) Then(x, Or(y1, y2)) => Or(Then(x, y1), Then(x, y2))
     #
     @abstractmethod
-    def canonical_nf(self, index: int = 0, *elems: TreeElem) -> 'TreePattern':
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> 'TreePattern':
         raise NotImplementedError
-
-    @abstractmethod
-    def pushdown_fieldname(self, name: str) -> None:
-        raise NotImplementedError
-
-    def expand(self) -> 'TreePattern':
-        return type(self)(*(tree_elem_expand(e) for e in self.elems))
 
     @abstractmethod
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
@@ -230,7 +156,7 @@ class Branch(TreePattern):
     __slots__ = "id",
     count: int = 0
 
-    def __init__(self, *elems: TreeElem) -> None:
+    def __init__(self, *elems: TreeElem[T]) -> None:
         super().__init__(*elems)
         self.id = f"B{Branch.count}"
         Branch.count += 1
@@ -238,19 +164,12 @@ class Branch(TreePattern):
             raise ValueError(f'Seq may only contain one BranchPattern '
                              f'at the end of elems; found: {self}')
 
-    def canonical_nf(self, index: int = 0, *elems: TreeElem) -> TreePattern:
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
         *fst_elems, last = self.elems
         if isinstance(last, TreePattern):
             return last.canonical_nf(index + len(fst_elems), *elems, *fst_elems)
         self.elems[:0] = elems
         return self
-
-    def pushdown_fieldname(self, name: str) -> None:
-        first = self.elems[0]
-        if isinstance(first, TreePattern):
-            first.pushdown_fieldname(name)
-        else:
-            self.elems[0] = (name, first)
 
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         yield {self.id: self}, self.id, self.id
@@ -259,15 +178,15 @@ class Branch(TreePattern):
 class ForkPattern(TreePattern, ABC):
     __slots__ = "index",
 
-    def __init__(self, *elems: TreeElem) -> None:
+    def __init__(self, *elems: TreeElem[T]) -> None:
         super().__init__(*elems)
         self.index: int = 0
 
     @property
-    def ord_builder(self) -> Type[Ord]:
-        return Total
+    def ord(self) -> Type[Ord]:
+        return Partial
 
-    def canonical_nf(self, index: int = 0, *elems: TreeElem) -> TreePattern:
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
         self.index = index
         includes_or = False
         self_elems = self.elems
@@ -277,14 +196,14 @@ class ForkPattern(TreePattern, ABC):
             if isinstance(elem, TreePattern):
                 normal = elem.canonical_nf(index, *elems)
                 if isinstance(normal, type(self)) and normal.index == self.index:
-                    self_elems[offset+i:offset+i+1] = normal.elems
+                    self_elems[offset + i:offset + i + 1] = normal.elems
                     offset += len(normal)
                 else:
-                    self_elems[offset+i] = normal
+                    self_elems[offset + i] = normal
                     if isinstance(normal, Or):
                         includes_or = True
             else:
-                self_elems[offset+i] = Branch(*elems, elem)
+                self_elems[offset + i] = Branch(*elems, elem)
         if len(self_elems) == 1:
             return self_elems[0]
         if includes_or:
@@ -298,39 +217,32 @@ class ForkPattern(TreePattern, ABC):
             new.index = self.index
             offset = 0
             for i in range(len(new.elems)):
-                elem = new.elems[offset+i]
+                elem = new.elems[offset + i]
                 if isinstance(elem, type(self)) and elem.index == self.index:
-                    new.elems[offset+i:offset+i+1] = elem.elems
+                    new.elems[offset + i:offset + i + 1] = elem.elems
                     offset += len(elem)
             yield new
-
-    def pushdown_fieldname(self, name: str) -> None:
-        for i, elem in enumerate(self.elems):
-            if isinstance(elem, TreePattern):
-                elem.pushdown_fieldname(name)
-            else:
-                self.elems[i] = (name, elem)
 
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         alias_iter, sib_iter, ord_iter = zip(*(next(e.to_exprs()) for e in self.elems))
         aliases = {k: v for d in alias_iter for k, v in d.items()}
         sib = Sib(self.index, *sib_iter)
-        ord_ = self.ord_builder(*ord_iter)
+        ord_ = self.ord(*ord_iter)
         yield aliases, sib, ord_
 
 
 class And(ForkPattern):
-    @property
-    def ord_builder(self) -> Type[Ord]:
-        return Partial
-
-
-class Then(ForkPattern):
     pass
 
 
+class Then(ForkPattern):
+    @property
+    def ord(self) -> Type[Ord]:
+        return Total
+
+
 class Or(ForkPattern):
-    def canonical_nf(self, index: int = 0, *elems: TreeElem) -> TreePattern:
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
         self_elems = self.elems
         offset = 0
         for i in range(len(self_elems)):
@@ -338,12 +250,12 @@ class Or(ForkPattern):
             if isinstance(elem, TreePattern):
                 normal = elem.canonical_nf(index, *elems)
                 if isinstance(normal, Or):
-                    self_elems[offset+i:offset+i+1] = normal.elems
+                    self_elems[offset + i:offset + i + 1] = normal.elems
                     offset += len(normal)
                 else:
-                    self_elems[offset+i] = normal
+                    self_elems[offset + i] = normal
             else:
-                self_elems[offset+i] = Branch(*elems, elem)
+                self_elems[offset + i] = Branch(*elems, elem)
         if len(self_elems) == 1:
             return self_elems[0]
         return self
@@ -354,5 +266,5 @@ class Or(ForkPattern):
 
 
 if __name__ == '__main__':
-    aa, ss, oo = (next(Then(ast.AST, And(ast.Name, ast.Load)).canonical_nf().to_exprs()))
+    aa, ss, oo = (next(Then('A', And('B', 'C')).canonical_nf().to_exprs()))
     print(aa, ss.constraint(), oo, oo.to_dag())
