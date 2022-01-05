@@ -1,14 +1,5 @@
 
-import operast.pattern
 from operast.pattern import *
-
-
-class TestExpand:
-    pass
-
-
-class TestPushdownFieldname:
-    pass
 
 
 # -- Canonical Normal Form --
@@ -247,7 +238,7 @@ class TestCanonicalNormalForm:
         to_check = [cnf]
         while to_check:
             elem = to_check.pop()
-            if isinstance(elem, operast.pattern.TreePattern):
+            if isinstance(elem, TreePattern):
                 to_check.extend(elem.elems)
                 if isinstance(elem, Or):
                     or_count += 1

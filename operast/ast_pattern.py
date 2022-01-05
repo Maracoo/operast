@@ -1,12 +1,43 @@
 
+__all__ = ["ASTElem", "Tag"]
+
 import ast
 from itertools import zip_longest
-from operast.pattern import EXTENSIONS, TreePattern, StateEff, TreeElem, Branch, And, Then, tree_elem_expand
+from operast.pattern import *
 from typing import Any, Iterator, List, Optional, Set, Tuple, Type, Union
 
 
 AnyAST = Union[ast.AST, Type[ast.AST]]
-ASTElem = Union[AnyAST, Tuple[str, AnyAST]]
+
+
+class Tag:
+    __slots__ = "field", "node"
+
+    def __init__(self, field: str, node: AnyAST) -> None:
+        self.field = field
+        self.node = node
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Tag):
+            return NotImplemented
+        return self.field == other.field and ast_equals(self.node, other.node)
+
+    def __repr__(self) -> str:
+        return f"Tag('{self.field}', {ast_repr(self.node)})"
+
+    def te_expand(self) -> TreeElem['Tag']:
+        expanded = ast_expand(self.node)
+        if isinstance(expanded, TreePattern):
+            return pushdown_fieldname(self.field, expanded)
+        self.node = expanded
+        return self
+
+
+setattr(Tag, EXT_EQUALS, Tag.__eq__)
+setattr(Tag, EXT_REPR, Tag.__repr__)
+
+
+ASTElem = Union[AnyAST, Tag]
 
 
 # noinspection PyProtectedMember
@@ -25,10 +56,10 @@ def iter_ast(node: ast.AST) -> Iterator[Tuple[str, Any]]:
 def pushdown_fieldname(name: str, elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
     if isinstance(elem, (ast.AST, type)):
         return name, elem
-    if isinstance(elem, tuple):
+    if isinstance(elem, Tag):
         return elem
     if isinstance(elem, StateEff):
-        elem.elem = (name, elem.elem)
+        elem.elem = Tag(name, elem.elem)
         return elem
     else:
         pat_range = 1 if isinstance(elem, Branch) else len(elem.elems)
@@ -37,14 +68,14 @@ def pushdown_fieldname(name: str, elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
             if isinstance(elem, TreePattern):
                 pushdown_fieldname(name, elem)
             else:
-                elem.elems[i] = (name, elem)
+                elem.elems[i] = Tag(name, elem)
         return elem
 
 
 def ast_expand_cases(name: str, item: Any) -> Optional[TreeElem[ASTElem]]:
     if isinstance(item, ast.AST):
         pat = ast_fields_expand(item)
-        return (name, item) if pat is None else Branch((name, item), pat)
+        return Tag(name, item) if pat is None else Branch(Tag(name, item), pat)
     if isinstance(item, (type, TreePattern, StateEff)):
         return pushdown_fieldname(name, item)
     return None
@@ -78,44 +109,31 @@ def ast_fields_expand(node: ast.AST) -> Optional['TreePattern']:
     return None
 
 
-def ast_expand(elem: ASTElem) -> TreeElem[ASTElem]:
-    if isinstance(elem, tuple):
-        name, node = elem
-        expanded = tree_elem_expand(node)
-        if isinstance(expanded, TreePattern):
-            return pushdown_fieldname(name, expanded)
-        return name, expanded
+def ast_expand(elem: AnyAST) -> TreeElem[AnyAST]:
     if isinstance(elem, ast.AST):
         pat = ast_fields_expand(elem)
         return elem if pat is None else Branch(elem, pat)
-    if isinstance(elem, type) and issubclass(elem, ast.AST):
-        return elem
+    return elem
 
 
-def ast_equals(elem_a: ASTElem, elem_b: ASTElem) -> bool:
-    if isinstance(elem_a, tuple) and isinstance(elem_b, tuple):
-        (label_a, node_a), (label_b, node_b) = elem_a, elem_b
-        return label_a == label_b and ast_equals(node_a, node_b)
+def ast_equals(elem_a: AnyAST, elem_b: AnyAST) -> bool:
     if isinstance(elem_a, ast.AST) and isinstance(elem_b, ast.AST):
         zipped = zip_longest(iter_ast(elem_a), iter_ast(elem_b), fillvalue=None)
         return type(elem_a) is type(elem_b) and all(i == j for i, j in zipped)
-    if isinstance(elem_a, type):
-        return elem_a is elem_b
-    return False
+    return elem_a is elem_b
 
 
-def ast_repr(elem: ASTElem) -> str:
-    if isinstance(elem, tuple):
-        label, elem = elem
-        return f"('{label}', {ast_repr(elem)})"
-    if isinstance(elem, type):
-        return elem.__name__
-    field_reprs = ', '.join(f'{f}={repr(v)}' for f, v in iter_ast(elem))
-    return f'{type(elem).__name__}({field_reprs})'
+def ast_repr(elem: AnyAST) -> str:
+    if isinstance(elem, ast.AST):
+        field_reprs = ', '.join(f'{f}={repr(v)}' for f, v in iter_ast(elem))
+        return f'{type(elem).__name__}({field_reprs})'
+    return elem.__name__
 
 
-EXTENSIONS.update({ast.AST: {
-    'expand': ast_expand,
-    '__eq__': ast_equals,
-    '__repr__': ast_repr,
-}})
+__EXTENSIONS.update({
+    ast.AST: {
+        EXT_EXPAND: ast_expand,
+        EXT_EQUALS: ast_equals,
+        EXT_REPR: ast_repr,
+    }
+})

@@ -5,4 +5,4 @@ pytest \
   --cov-branch \
   --cov-report=term \
   --cov-report=html \
-  "test/"
+  "tests/"

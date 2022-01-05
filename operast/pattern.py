@@ -1,6 +1,9 @@
 
 __all__ = [
-    "EXTENSIONS",
+    "__EXTENSIONS",
+    "EXT_EXPAND",
+    "EXT_EQUALS",
+    "EXT_REPR",
     "And",
     "Branch",
     "Or",
@@ -8,90 +11,94 @@ __all__ = [
     "Then",
     "TreeElem",
     "TreePattern",
-    "tree_elem_expand"
 ]
 
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from itertools import product, zip_longest
 from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
-from typing import Callable, Dict, Generic, Iterable, Iterator, \
+from typing import Callable, Dict, Generic, Iterator, \
     List, Tuple, Type, TypeVar, Union
 
 T = TypeVar('T')
 
 
 class StateEff(Generic[T]):
+    __slots__ = "elem", "_cls"
+
     def __init__(self, elem: T):
         self.elem = elem
+        self._cls = elem if isinstance(elem, type) else type(elem)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, StateEff):
             return NotImplemented
-        return tree_elem_equals(self, other)
+        return get_ext_method(self._cls, EXT_EQUALS)(self.elem, other.elem)
 
     def __repr__(self) -> str:
-        return f'{type(self).__name__}({tree_elem_repr(self.elem)})'
+        elem_repr = get_ext_method(self._cls, EXT_REPR)(self.elem)
+        return f'{type(self).__name__}({elem_repr})'
+
+    def expand(self) -> 'StateEff':
+        self.elem = get_ext_method(self._cls, EXT_EXPAND)(self.elem)
+        return self
 
 
 TreeElem = Union['TreePattern', StateEff, T]
 Aliases = Dict[str, 'Branch']
 
-EXTENSIONS: Dict[type, Dict[str, Callable]] = {
+
+EXT_EXPAND = 'te_expand'
+EXT_EQUALS = 'te_equals'
+EXT_REPR = 'te_repr'
+
+
+__EXTENSIONS: Dict[type, Dict[str, Callable]] = {
     str: {
-        'expand': lambda x: x,
-        '__eq__': str.__eq__,
-        '__repr__': str.__repr__,
+        EXT_EXPAND: lambda x: x,
+        EXT_EQUALS: str.__eq__,
+        EXT_REPR: str.__repr__,
     }
 }
 
 
-def _extension_type(t: T) -> type:
-    for typ in EXTENSIONS:
-        if (isinstance(t, type) and issubclass(t, typ)) or isinstance(t, typ):
-            return typ
-        if isinstance(t, tuple):
-            for i in t:
-                return _extension_type(i)
-    raise ValueError(f"No type of {t} found in extensions.")
+def _extension_type(_cls: type) -> Dict[str, Callable]:
+    if _cls in __EXTENSIONS:
+        return __EXTENSIONS[_cls]
+    for typ in __EXTENSIONS:
+        if issubclass(_cls, typ):
+            __EXTENSIONS[_cls] = __EXTENSIONS[typ]
+            return __EXTENSIONS[_cls]
+    raise TypeError(f"No type of {_cls} found in extensions.")
 
 
-def get_extension_func(t: T, name: str) -> Callable:
-    return EXTENSIONS[_extension_type(t)][name]
-
-
-def _extension_expand(t: T) -> Callable[[T], TreeElem[T]]:
-    return get_extension_func(t, 'expand')
-
-
-def _extension_eq(t: T) -> Callable[[T, T], bool]:
-    return get_extension_func(t, '__eq__')
-
-
-def _extension_repr(t: T) -> Callable[[T], str]:
-    return get_extension_func(t, '__repr__')
+@lru_cache(maxsize=None)
+def get_ext_method(_cls: Type[T], method: str) -> Callable:
+    func: Callable = getattr(_cls, method, None)
+    if func is None:
+        func = _extension_type(_cls)[method]
+    return func
 
 
 def tree_elem_expand(elem: TreeElem[T]) -> TreeElem[T]:
-    if isinstance(elem, StateEff):
-        elem.elem = tree_elem_expand(elem.elem)
-        return elem
-    if isinstance(elem, TreePattern):
-        for i, e in enumerate(elem.elems):
-            elem.elems[i] = tree_elem_expand(e)
-        return elem
-    return _extension_expand(elem)(elem)
+    if isinstance(elem, (TreePattern, StateEff)):
+        return elem.expand()
+    _cls = elem if isinstance(elem, type) else type(elem)
+    return get_ext_method(_cls, EXT_EXPAND)(elem)
 
 
 def tree_elem_equals(elem_a: TreeElem[T], elem_b: TreeElem[T]) -> bool:
     if isinstance(elem_a, (TreePattern, StateEff)):
         return elem_a == elem_b
-    return _extension_eq(elem_a)(elem_a, elem_b)
+    _cls = elem_a if isinstance(elem_a, type) else type(elem_a)
+    return get_ext_method(_cls, EXT_EQUALS)(elem_a, elem_b)
 
 
 def tree_elem_repr(elem: TreeElem[T]) -> str:
     if isinstance(elem, (TreePattern, StateEff)):
         return repr(elem)
-    return _extension_repr(elem)(elem)
+    _cls = elem if isinstance(elem, type) else type(elem)
+    return get_ext_method(_cls, EXT_REPR)(elem)
 
 
 class TreePattern(ABC, Generic[T]):
@@ -117,7 +124,7 @@ class TreePattern(ABC, Generic[T]):
     def __getitem__(self, item: int) -> TreeElem[T]:
         return self.elems[item]
 
-    def __setitem__(self, key: int, value: Union[TreeElem[T], Iterable[TreeElem[T]]]) -> None:
+    def __setitem__(self, key: int, value: TreeElem[T]) -> None:
         self.elems[key] = value
 
     def __repr__(self) -> str:
@@ -150,6 +157,11 @@ class TreePattern(ABC, Generic[T]):
     @abstractmethod
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         raise NotImplementedError
+
+    def expand(self) -> 'TreePattern':
+        for i, elem in enumerate(self.elems):
+            self.elems[i] = tree_elem_expand(elem)
+        return self
 
 
 class Branch(TreePattern):

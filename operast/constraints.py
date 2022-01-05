@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable as Iter
 from itertools import product
-from typing import Dict, Iterable, Iterator, List, Set, Tuple, TypeVar, Union
+from typing import Dict, Iterable, Iterator, List, Set, Tuple, TypeVar, Union, cast
 
 
 T = TypeVar('T')
@@ -19,7 +19,7 @@ def flatten_irregular(it: Iterable[Union[T, Iterable[T]]]) -> Iterator[T]:
         if isinstance(i, Iter) and not isinstance(i, str):
             yield from i
         else:
-            yield i
+            yield cast(T, i)
 
 
 class Sib:
@@ -41,7 +41,7 @@ class Sib:
         elem_reprs = ', '.join(repr(e) for e in self.elems)
         return f"{type(self).__name__}(index={self.index}, {elem_reprs})"
 
-    def _flatten(self, elems: Tuple[SibElem]) -> Iterator[SibElem]:
+    def _flatten(self, elems: Tuple[SibElem, ...]) -> Iterator[SibElem]:
         for elem in elems:
             if isinstance(elem, Sib) and elem.index == self.index:
                 yield from elem.elems
@@ -62,6 +62,7 @@ class Sib:
 
 
 OrdElem = Union[str, 'Ord']
+StrTuples = Union[str, Tuple[str, ...]]
 
 
 class Ord(ABC):
@@ -77,7 +78,7 @@ class Ord(ABC):
         return f"{type(self).__name__}({elem_reprs})"
 
     @abstractmethod
-    def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
+    def _find_paths(self) -> Iterator[List[StrTuples]]:
         raise NotImplementedError
 
     def _paths_product(self) -> Iterator[Tuple[str, ...]]:
@@ -93,12 +94,12 @@ class Ord(ABC):
 
 
 class Total(Ord):
-    def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
+    def _find_paths(self) -> Iterator[List[StrTuples]]:
         for e in self.elems:
             yield [e] if isinstance(e, str) else list(e._paths_product())
 
 
 class Partial(Ord):
-    def _find_paths(self) -> Iterator[List[Tuple[str, ...]]]:
+    def _find_paths(self) -> Iterator[List[StrTuples]]:
         paths = (e._paths_product() if isinstance(e, Ord) else e for e in self.elems)
         yield list(flatten_irregular(paths))
