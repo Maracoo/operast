@@ -23,6 +23,23 @@ class TestSibling:
         ]
         assert constrained == result
 
+    def test_sib_equals(self):
+        sib1 = Sib(0, 'A', 'B')
+        sib2 = Sib(1, 'A', 'B')
+        sib3 = Sib(0, 'X', 'Y')
+        sib4 = Sib(0, 'A', 'B')
+
+        assert sib1 == sib4
+        assert sib1 != sib2 != sib3
+        assert sib1 != Total('A', 'B')
+
+    def test_sib_init_flatten(self):
+        sib1 = Sib(0, 'A', Sib(0, 'B', 'C'))
+        assert sib1 == Sib(0, 'A', 'B', 'C')
+
+        sib2 = Sib(0, 'A', Sib(1, 'B', 'C'))
+        assert sib2 != Sib(0, 'A', 'B', 'C')
+
 
 # Cases:
 #   1) Ord(A, B) => A -> B
@@ -113,3 +130,16 @@ class TestOrdered:
             'C2': {'D'}
         }
         assert dag == expected
+
+    def test_ord_equals(self):
+        t1 = Total('A', 'B', 'C')
+        t2 = Total('A', 'B', 'C')
+        t3 = Total('B', 'C')
+
+        p1 = Partial('A', 'B', 'C')
+        p2 = Partial('A', 'B', 'C')
+        p3 = Partial('B', 'C')
+
+        assert t1 == t2
+        assert p1 == p2
+        assert t1 != t3 != p1 != p3

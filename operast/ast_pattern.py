@@ -1,5 +1,5 @@
 
-__all__ = ["ASTElem", "Tag"]
+__all__ = ["ASTElem", "Tag", "ast_equals", "ast_expand"]
 
 import ast
 from itertools import zip_longest
@@ -22,7 +22,7 @@ class Tag:
             return NotImplemented
         return self.field == other.field and ast_equals(self.node, other.node)
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         return f"Tag('{self.field}', {ast_repr(self.node)})"
 
     def te_expand(self) -> TreeElem['Tag']:
@@ -53,30 +53,40 @@ def iter_ast(node: ast.AST) -> Iterator[Tuple[str, Any]]:
     yield from ((k, v) for k, v in node.__dict__.items() if k in PY_AST_FIELDS)
 
 
+def ast_fields(node: ast.AST) -> List[Tuple[str, Any]]:
+    return [(k, v) for k, v in node.__dict__.items() if k in PY_AST_FIELDS]
+
+
 def pushdown_fieldname(name: str, elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
-    if isinstance(elem, (ast.AST, type)):
-        return name, elem
-    if isinstance(elem, Tag):
+    if isinstance(elem, type) and issubclass(elem, ast.AST):
+        return Tag(name, elem)
+    elif isinstance(elem, Tag):
         return elem
-    if isinstance(elem, StateEff):
+    elif isinstance(elem, StateEff):
         elem.elem = Tag(name, elem.elem)
         return elem
-    else:
+    elif isinstance(elem, TreePattern):
         pat_range = 1 if isinstance(elem, Branch) else len(elem.elems)
         for i in range(pat_range):
-            elem = elem.elems[i]
-            if isinstance(elem, TreePattern):
-                pushdown_fieldname(name, elem)
+            sub_elem = elem.elems[i]
+            if isinstance(sub_elem, TreePattern):
+                pushdown_fieldname(name, sub_elem)
             else:
-                elem.elems[i] = Tag(name, elem)
+                elem.elems[i] = Tag(name, sub_elem)
         return elem
+    else:  # pragma: no cover
+        raise ValueError('Unreachable! All AST instances already handled')
 
 
 def ast_expand_cases(name: str, item: Any) -> Optional[TreeElem[ASTElem]]:
     if isinstance(item, ast.AST):
         pat = ast_fields_expand(item)
-        return Tag(name, item) if pat is None else Branch(Tag(name, item), pat)
-    if isinstance(item, (type, TreePattern, StateEff)):
+        if pat is None:
+            return Tag(name, item)
+        return Branch(Tag(name, item), pat)
+    elif isinstance(item, (TreePattern, StateEff)):
+        return pushdown_fieldname(name, item)
+    elif isinstance(item, type) and issubclass(item, ast.AST):
         return pushdown_fieldname(name, item)
     return None
 
@@ -85,12 +95,13 @@ def ast_fields_expand(node: ast.AST) -> Optional['TreePattern']:
     # possible elements inside the fields of an AST node:
     # ast.AST, Type[ast.AST], BranchPattern
     and_elements: List[TreeElem[ASTElem]] = []
-    for name, field in iter_ast(node):
+    for name, field in ast_fields(node):
         if isinstance(field, list):
             then_elements = []
             offset = 0
-            for i, item in enumerate(field):
-                expanded: Optional[TreeElem[ASTElem]] = ast_expand_cases(name, item)
+            for i in range(len(field)):
+                expanded: Optional[TreeElem[ASTElem]] = ast_expand_cases(name, field[offset+i])
+                print(field[offset+i:offset+i+1])
                 if expanded is not None:
                     then_elements.append(expanded)
                     del field[offset+i:offset+i+1]
@@ -123,7 +134,7 @@ def ast_equals(elem_a: AnyAST, elem_b: AnyAST) -> bool:
     return elem_a is elem_b
 
 
-def ast_repr(elem: AnyAST) -> str:
+def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
     if isinstance(elem, ast.AST):
         field_reprs = ', '.join(f'{f}={repr(v)}' for f, v in iter_ast(elem))
         return f'{type(elem).__name__}({field_reprs})'

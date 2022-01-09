@@ -73,13 +73,18 @@ class Ord(ABC):
     def __init__(self, *elems: OrdElem):
         self.elems = elems
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.elems == other.elems
+
     def __repr__(self) -> str:  # pragma: no cover
         elem_reprs = ', '.join(repr(e) for e in self.elems)
         return f"{type(self).__name__}({elem_reprs})"
 
     @abstractmethod
     def _find_paths(self) -> Iterator[List[StrTuples]]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def _paths_product(self) -> Iterator[Tuple[str, ...]]:
         for prod in product(*self._find_paths()):

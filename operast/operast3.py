@@ -208,16 +208,6 @@ if __name__ == '__main__':
 
     s30 = Branch(And(Branch(ast.Name(id='b')))).canonical_nf()
 
-    # print(s30)
-
-    # print(s30 == s40)
-
-    # print(And(Then(Or(And(Then(Seq(ast.Call))), ast.AST))).first_normal().second_normal().alias())
-    #
-    # print(pattern_elem_equals(ast.Name(id='b'), ast.Name(id='b')))
-
-    # print(get_all_ast_fields())
-
 
     def digits_to_number(digits: Sequence[int], radix: int) -> int:
         if radix == 1:

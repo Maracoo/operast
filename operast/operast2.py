@@ -248,6 +248,7 @@ class StateAffect:
                            fail=self.fail,
                            predicate=_as_pred(e))
 
+    # todo: do not support goto
     @classmethod
     def goto(cls, succeed: Optional[State] = None,
              fail: Optional[State] = None) -> 'StateAffect':

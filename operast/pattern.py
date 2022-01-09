@@ -23,6 +23,7 @@ from typing import Callable, Dict, Generic, Iterator, \
 T = TypeVar('T')
 
 
+# todo: rename language operator
 class StateEff(Generic[T]):
     __slots__ = "elem", "_cls"
 
@@ -35,7 +36,7 @@ class StateEff(Generic[T]):
             return NotImplemented
         return get_ext_method(self._cls, EXT_EQUALS)(self.elem, other.elem)
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         elem_repr = get_ext_method(self._cls, EXT_REPR)(self.elem)
         return f'{type(self).__name__}({elem_repr})'
 
@@ -104,10 +105,8 @@ def tree_elem_repr(elem: TreeElem[T]) -> str:
 class TreePattern(ABC, Generic[T]):
     __slots__ = 'elems',
 
-    def __init__(self, *elems: TreeElem[T]) -> None:
-        if not elems:
-            raise ValueError(f"{type(self).__name__} cannot be empty.")
-        self.elems: List[TreeElem[T]] = list(elems)
+    def __init__(self, elem: TreeElem[T], *elems: TreeElem[T]) -> None:
+        self.elems: List[TreeElem[T]] = [elem, *elems]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TreePattern):
@@ -127,7 +126,7 @@ class TreePattern(ABC, Generic[T]):
     def __setitem__(self, key: int, value: TreeElem[T]) -> None:
         self.elems[key] = value
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         return f"{type(self).__name__}({', '.join(tree_elem_repr(e) for e in self.elems)})"
 
     # -- Canonical Normal Form --
@@ -152,11 +151,11 @@ class TreePattern(ABC, Generic[T]):
     #
     @abstractmethod
     def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> 'TreePattern':
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def expand(self) -> 'TreePattern':
         for i, elem in enumerate(self.elems):
@@ -168,13 +167,14 @@ class Branch(TreePattern):
     __slots__ = "id",
     count: int = 0
 
-    def __init__(self, *elems: TreeElem[T]) -> None:
-        super().__init__(*elems)
+    def __init__(self, elem: TreeElem[T], *elems: TreeElem[T]) -> None:
+        super().__init__(elem, *elems)
         self.id = f"B{Branch.count}"
         Branch.count += 1
-        if any(isinstance(e, TreePattern) for e in elems[:-1]):
-            raise ValueError(f'Seq may only contain one BranchPattern '
-                             f'at the end of elems; found: {self}')
+        if any(isinstance(e, TreePattern) for e in self.elems[:-1]):
+            raise ValueError(f'{Branch.__name__} may only contain one '
+                             f'{TreePattern.__name__} at the end of '
+                             f'elems; found: {repr(self)}')
 
     def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
         *fst_elems, last = self.elems
@@ -190,8 +190,8 @@ class Branch(TreePattern):
 class ForkPattern(TreePattern, ABC):
     __slots__ = "index",
 
-    def __init__(self, *elems: TreeElem[T]) -> None:
-        super().__init__(*elems)
+    def __init__(self, elem: TreeElem[T], *elems: TreeElem[T]) -> None:
+        super().__init__(elem, *elems)
         self.index: int = 0
 
     @property
@@ -236,6 +236,9 @@ class ForkPattern(TreePattern, ABC):
             yield new
 
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+        # The call to next may be used blindly since after canonical_nf has
+        # been called, the elems of And and Then will only include Branch, And
+        # and Then, each of which only ever yields a single tuple.
         alias_iter, sib_iter, ord_iter = zip(*(next(e.to_exprs()) for e in self.elems))
         aliases = {k: v for d in alias_iter for k, v in d.items()}
         sib = Sib(self.index, *sib_iter)
@@ -275,8 +278,3 @@ class Or(ForkPattern):
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         for elem in self.elems:
             yield from elem.to_exprs()
-
-
-if __name__ == '__main__':
-    aa, ss, oo = (next(Then('A', And('B', 'C')).canonical_nf().to_exprs()))
-    print(aa, ss.constraint(), oo, oo.to_dag())

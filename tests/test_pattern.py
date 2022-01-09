@@ -1,5 +1,12 @@
 
+import pytest
+from operast.constraints import Sib, Total, Partial
 from operast.pattern import *
+
+
+@pytest.fixture(autouse=True, scope='function')
+def reset_branch_count():
+    Branch.count = 0
 
 
 # -- Canonical Normal Form --
@@ -244,3 +251,98 @@ class TestCanonicalNormalForm:
                     or_count += 1
 
         assert or_count == 1
+
+
+# .to_exprs must only be called after .canonical_nf has been called
+#
+# noinspection PyPep8Naming
+class TestToExpression:
+
+    def test_Branch_simple_to_expr(self):
+        tp = Branch('A', 'B', 'C').canonical_nf()
+        aliases, sib, ord_ = next(tp.to_exprs())
+        assert aliases == {'B0': Branch('A', 'B', 'C')}
+        assert sib == 'B0'
+        assert ord_ == 'B0'
+
+    def test_And_simple_to_expr(self):
+        tp = And('A', 'B', 'C').canonical_nf()
+        aliases, sib, ord_ = next(tp.to_exprs())
+        assert aliases == {'B0': Branch('A'), 'B1': Branch('B'), 'B2': Branch('C')}
+        assert sib == Sib(0, 'B0', 'B1', 'B2')
+        assert ord_ == Partial('B0', 'B1', 'B2')
+
+    def test_Then_simple_to_expr(self):
+        tp = Then('A', 'B', 'C').canonical_nf()
+        aliases, sib, ord_ = next(tp.to_exprs())
+        assert aliases == {'B0': Branch('A'), 'B1': Branch('B'), 'B2': Branch('C')}
+        assert sib == Sib(0, 'B0', 'B1', 'B2')
+        assert ord_ == Total('B0', 'B1', 'B2')
+
+    def test_Or_simple_to_expr(self):
+        tp = Or('A', 'B', 'C').canonical_nf()
+        for i, (aliases, sib, ord_) in enumerate(tp.to_exprs()):
+            assert aliases == {f'B{i}': Branch(tp[i])}
+            assert sib == f'B{i}'
+            assert ord_ == f'B{i}'
+
+    def test_complex_to_expr_1(self):
+        tp = Branch('A', 'B', And('C', Branch('D', 'E'))).canonical_nf()
+        aliases, sib, ord_ = next(tp.to_exprs())
+        assert aliases == {
+            'B2': Branch('A', 'B', 'C'), 'B0': Branch('A', 'B', 'D', 'E')
+        }
+        assert sib == Sib(2, 'B2', 'B0')
+        assert ord_ == Partial('B2', 'B0')
+
+    def test_complex_to_expr_2(self):
+        pass
+
+
+class TestStateEffect:
+
+    def test_equals(self):
+        s1 = StateEff('A')
+        s2 = StateEff('A')
+        s3 = StateEff('B')
+        pat = And('A', 'B')
+
+        assert s1 == s2
+        assert s1 != s3 != pat
+
+    def test_expand(self):
+        # expand with string elem has no effect
+        se = StateEff('A')
+        assert se == se.expand()
+
+
+# noinspection PyPep8Naming
+class TestTreePattern:
+
+    def test_iter(self):
+        for a, b in zip(Branch('A', 'B', 'C'), ['A', 'B', 'C']):
+            assert a == b
+
+    def test_getitem(self):
+        assert And('A', Branch('B'), Or('C', 'D'))[1] == Branch('B')
+
+    def test_setitem(self):
+        tp = Then('A', And('B', 'C'), Branch('D'))
+        tp[1] = Then('B', 'C')
+        assert tp == Then('A', Then('B', 'C'), Branch('D'))
+
+
+# noinspection PyPep8Naming
+class TestBranch:
+
+    def test_TreePattern_last_elem_only(self):
+        # The following elems are allowed
+        assert isinstance(Branch(Branch('A')), Branch)
+        assert isinstance(Branch('A', Branch('B')), Branch)
+
+        # The following elems are NOT allowed
+        with pytest.raises(ValueError):
+            Branch('A', Branch('B'), 'C')
+
+        with pytest.raises(ValueError):
+            Branch(Branch('A'), 'B')
