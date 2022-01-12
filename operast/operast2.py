@@ -174,6 +174,7 @@ def node_identity(node: ASTElem) -> ASTPredicate:
 PredOrNodeElem = Union['NodePredicate', ASTElem]
 
 
+# todo: call it language predicate in the future
 @dataclass
 class NodePredicate:
     __slots__ = 'func'

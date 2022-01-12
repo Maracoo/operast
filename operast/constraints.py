@@ -87,8 +87,8 @@ class Ord(ABC):
         raise NotImplementedError  # pragma: no cover
 
     def _paths_product(self) -> Iterator[Tuple[str, ...]]:
-        for prod in product(*self._find_paths()):
-            yield tuple(flatten_irregular(prod))
+        for tup in product(*self._find_paths()):
+            yield tuple(flatten_irregular(tup))
 
     def to_dag(self) -> Dict[str, Set[str]]:
         dag = defaultdict(set)

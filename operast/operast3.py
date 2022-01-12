@@ -1,7 +1,7 @@
 import ast
 import astpretty
 import inspect
-from operast.pattern import StateEff, Branch, Then, And, Or
+from operast.pattern import Operator, Branch, Then, And, Or
 from typing import Any, Iterator, List, Sequence, Tuple
 
 
@@ -25,7 +25,7 @@ def iter_child_names_nodes(node: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
                     yield name, item
 
 
-class Until(StateEff):
+class Until(Operator):
     pass
 
 

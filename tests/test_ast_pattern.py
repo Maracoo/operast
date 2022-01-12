@@ -7,15 +7,15 @@ from operast.pattern import *
 class TestTag:
 
     def test_expand_1(self):
-        expand = Tag('body', ast.AST).te_expand()
+        expand = to_pattern(Tag('body', ast.AST))
         assert expand == Tag('body', ast.AST)
 
     def test_expand_2(self):
-        expand = Tag('body', ast.AST(id='a')).te_expand()
+        expand = to_pattern(Tag('body', ast.AST(id='a')))
         assert expand == Tag('body', ast.AST(id='a'))
 
     def test_expand_3(self):
-        expand = Tag('body', ast.AST(ctx=ast.Store)).te_expand()
+        expand = to_pattern(Tag('body', ast.AST(ctx=ast.Store)))
         expected = Branch(Tag('body', ast.AST()), And(Tag('ctx', ast.Store)))
         assert expand == expected
 
@@ -44,21 +44,21 @@ class TestASTEquals:
 class TestASTExpand:
 
     def test_expand_ast_1(self):
-        assert ast_equals(ast_expand(ast.AST), ast.AST)
+        assert ast_equals(to_pattern(ast.AST), ast.AST)
 
     def test_expand_ast_2(self):
-        assert ast_equals(ast_expand(ast.Name()), ast.Name())
+        assert ast_equals(to_pattern(ast.Name()), ast.Name())
 
     def test_expand_ast_3(self):
-        expand = ast_expand(ast.AST(ctx=ast.Store))
+        expand = to_pattern(ast.AST(ctx=ast.Store))
         assert expand == Branch(ast.AST(), And(Tag('ctx', ast.Store)))
 
     def test_expand_ast_4(self):
-        expand = ast_expand(ast.AST(body=[ast.Assign]))
+        expand = to_pattern(ast.AST(body=[ast.Assign]))
         assert expand == Branch(ast.AST(), And(Then(Tag('body', ast.Assign))))
 
     def test_expand_ast_5(self):
-        expand = ast_expand(
+        expand = to_pattern(
             ast.AST(id='a', body=[ast.Assign, ast.Return, ast.Name(id='x')])
         )
         expected = Branch(
@@ -76,7 +76,7 @@ class TestASTExpand:
             name='SomeClass',
             body=[ast.Assign],
         )
-        expand = ast_expand(ast_inst)
+        expand = to_pattern(ast_inst)
         expected = Branch(ast.ClassDef(name='SomeClass'), And(Then(Tag('body', ast.Assign))))
         assert expand == expected
 
@@ -84,9 +84,9 @@ class TestASTExpand:
             name='SomeClass',
             body=[ast.Assign],
         ))
-        assert branch.expand() == Branch(expand)
+        assert to_pattern(branch) == Branch(expand)
 
     def test_expand_ast_7(self):
-        expand = ast_expand(ast.AST(body=[Branch(ast.Name, ast.Store)]))
+        expand = to_pattern(ast.AST(body=[Branch(ast.Name, ast.Store)]))
         expected = Branch(ast.AST(), And(Then(Branch(ast.Name, ast.Store))))
         assert expand == expected

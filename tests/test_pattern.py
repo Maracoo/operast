@@ -299,21 +299,16 @@ class TestToExpression:
         pass
 
 
-class TestStateEffect:
+class TestOperator:
 
     def test_equals(self):
-        s1 = StateEff('A')
-        s2 = StateEff('A')
-        s3 = StateEff('B')
+        s1 = Operator('A')
+        s2 = Operator('A')
+        s3 = Operator('B')
         pat = And('A', 'B')
 
         assert s1 == s2
         assert s1 != s3 != pat
-
-    def test_expand(self):
-        # expand with string elem has no effect
-        se = StateEff('A')
-        assert se == se.expand()
 
 
 # noinspection PyPep8Naming

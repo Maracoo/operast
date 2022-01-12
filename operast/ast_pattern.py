@@ -1,5 +1,5 @@
 
-__all__ = ["ASTElem", "Tag", "ast_equals", "ast_expand"]
+__all__ = ["ASTElem", "Tag", "ast_equals", "ast_repr", "to_pattern"]
 
 import ast
 from itertools import zip_longest
@@ -14,6 +14,9 @@ class Tag:
     __slots__ = "field", "node"
 
     def __init__(self, field: str, node: AnyAST) -> None:
+        if not (isinstance(node, ast.AST)
+                or isinstance(node, type) and issubclass(node, ast.AST)):
+            raise ValueError(f"node must be an instance of AST or Type[AST]; found: {node}")
         self.field = field
         self.node = node
 
@@ -24,17 +27,6 @@ class Tag:
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"Tag('{self.field}', {ast_repr(self.node)})"
-
-    def te_expand(self) -> TreeElem['Tag']:
-        expanded = ast_expand(self.node)
-        if isinstance(expanded, TreePattern):
-            return pushdown_fieldname(self.field, expanded)
-        self.node = expanded
-        return self
-
-
-setattr(Tag, EXT_EQUALS, Tag.__eq__)
-setattr(Tag, EXT_REPR, Tag.__repr__)
 
 
 ASTElem = Union[AnyAST, Tag]
@@ -57,74 +49,101 @@ def ast_fields(node: ast.AST) -> List[Tuple[str, Any]]:
     return [(k, v) for k, v in node.__dict__.items() if k in PY_AST_FIELDS]
 
 
-def pushdown_fieldname(name: str, elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
-    if isinstance(elem, type) and issubclass(elem, ast.AST):
-        return Tag(name, elem)
-    elif isinstance(elem, Tag):
+Blah = Union[ASTElem, TreePattern, Operator, list, Any]
+
+
+def tag_elem(elem: Blah, name: Optional[str] = None) -> Blah:
+    if name is None:
         return elem
-    elif isinstance(elem, StateEff):
-        elem.elem = Tag(name, elem.elem)
+    elif isinstance(elem, Tag):
         return elem
     elif isinstance(elem, TreePattern):
         pat_range = 1 if isinstance(elem, Branch) else len(elem.elems)
         for i in range(pat_range):
             sub_elem = elem.elems[i]
             if isinstance(sub_elem, TreePattern):
-                pushdown_fieldname(name, sub_elem)
+                tag_elem(sub_elem, name)
             else:
                 elem.elems[i] = Tag(name, sub_elem)
         return elem
-    else:  # pragma: no cover
-        raise ValueError('Unreachable! All AST instances already handled')
+    else:
+        return Tag(name, elem)
 
 
-def ast_expand_cases(name: str, item: Any) -> Optional[TreeElem[ASTElem]]:
-    if isinstance(item, ast.AST):
-        pat = ast_fields_expand(item)
-        if pat is None:
-            return Tag(name, item)
-        return Branch(Tag(name, item), pat)
-    elif isinstance(item, (TreePattern, StateEff)):
-        return pushdown_fieldname(name, item)
-    elif isinstance(item, type) and issubclass(item, ast.AST):
-        return pushdown_fieldname(name, item)
-    return None
+def ast_type_to_pattern(elem: Type[ast.AST], name: Optional[str] = None) -> Tuple[Type[ast.AST], Optional[Any]]:
+    return tag_elem(elem, name), None
 
 
-def ast_fields_expand(node: ast.AST) -> Optional['TreePattern']:
-    # possible elements inside the fields of an AST node:
-    # ast.AST, Type[ast.AST], BranchPattern
-    and_elements: List[TreeElem[ASTElem]] = []
-    for name, field in ast_fields(node):
-        if isinstance(field, list):
-            then_elements = []
-            offset = 0
-            for i in range(len(field)):
-                expanded: Optional[TreeElem[ASTElem]] = ast_expand_cases(name, field[offset+i])
-                print(field[offset+i:offset+i+1])
-                if expanded is not None:
-                    then_elements.append(expanded)
-                    del field[offset+i:offset+i+1]
-                    offset -= 1
-            if then_elements:
-                and_elements.append(Then(*then_elements))
-                if not field:
-                    delattr(node, name)
-        else:
-            expanded = ast_expand_cases(name, field)
-            if expanded is not None:
-                and_elements.append(expanded)
-                delattr(node, name)
-    if and_elements:
-        return And(*and_elements)
-    return None
+def ast_to_pattern(elem: ast.AST, name: Optional[str] = None) -> Tuple[ast.AST, Optional[Any]]:
+    and_elems = []
+    for field, attr in ast_fields(elem):
+        opt_pat, opt_any = _to_pattern(attr, field)
+        if opt_pat is not None:
+            and_elems.append(opt_pat)
+        if opt_any is None:
+            delattr(elem, field)
+    tagged = tag_elem(elem, name)
+    result = Branch(tagged, And(*and_elems)) if and_elems else tagged
+    return result, None
 
 
-def ast_expand(elem: AnyAST) -> TreeElem[AnyAST]:
-    if isinstance(elem, ast.AST):
-        pat = ast_fields_expand(elem)
-        return elem if pat is None else Branch(elem, pat)
-    return elem
+def tag_to_pattern(elem: Tag) -> Tuple[Tag, Optional[Any]]:
+    res, _ = _to_pattern(elem.node)
+    assert res is not None
+    return tag_elem(res, elem.field), None
+
+
+def tree_pattern_to_pattern(elem: TreePattern) -> Tuple[TreePattern, Optional[Any]]:
+    for i, sub_elem in enumerate(elem.elems):
+        res, _ = _to_pattern(sub_elem)
+        assert res is not None
+        elem.elems[i] = res
+    return elem, None
+
+
+def operator_to_pattern(elem: Operator, name: Optional[str] = None) -> Tuple[Operator, Optional[Any]]:
+    res, _ = _to_pattern(elem.elem)
+    assert res is not None
+    elem.elem = res
+    return tag_elem(elem, name), None
+
+
+def list_to_pattern(elem: list, name: Optional[str] = None) -> Tuple[Optional[Then], Optional[Any]]:
+    then_elems = []
+    offset = 0
+    for i in range(len(elem)):
+        opt_pat, opt_any = _to_pattern(elem[offset+i], name)
+        if opt_pat is not None:
+            then_elems.append(opt_pat)
+        if opt_any is None:
+            del elem[offset+i:offset+i+1]
+            offset -= 1
+    any_res = elem if elem else None
+    result = Then(*then_elems) if then_elems else None
+    return result, any_res
+
+
+def _to_pattern(elem: Any, name: Optional[str] = None) -> Tuple[Optional[TreeElem[ASTElem]], Optional[Any]]:
+    if isinstance(elem, type) and issubclass(elem, ast.AST):
+        return ast_type_to_pattern(elem, name)
+    elif isinstance(elem, ast.AST):
+        return ast_to_pattern(elem, name)
+    elif isinstance(elem, Tag):
+        return tag_to_pattern(elem)
+    elif isinstance(elem, TreePattern):
+        return tree_pattern_to_pattern(elem)
+    elif isinstance(elem, Operator):
+        return operator_to_pattern(elem, name)
+    elif isinstance(elem, list):
+        return list_to_pattern(elem, name)
+    else:
+        return None, elem
+
+
+def to_pattern(elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
+    result, _ = _to_pattern(elem)
+    assert result is not None
+    return result
 
 
 def ast_equals(elem_a: AnyAST, elem_b: AnyAST) -> bool:
@@ -143,7 +162,6 @@ def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
 
 __EXTENSIONS.update({
     ast.AST: {
-        EXT_EXPAND: ast_expand,
         EXT_EQUALS: ast_equals,
         EXT_REPR: ast_repr,
     }
