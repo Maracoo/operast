@@ -1,7 +1,6 @@
 import ast
 import astpretty
 import inspect
-from operast.pattern import Operator, Branch, Then, And, Or
 from typing import Any, Iterator, List, Sequence, Tuple
 
 
@@ -23,10 +22,6 @@ def iter_child_names_nodes(node: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
             for item in field:
                 if isinstance(item, ast.AST):
                     yield name, item
-
-
-class Until(Operator):
-    pass
 
 
 def index_traverse_nodes(node: ast.AST, index: Tuple[int, ...] = (),
@@ -74,46 +69,6 @@ def blah():
             pass
 
     A()
-
-
-# User input: (list match is implicit 'Then')
-example_unexpanded = Branch(
-    ast.FunctionDef,
-    And(
-        ast.ClassDef(
-            body=[
-                Branch(ast.Assign, ast.Name(id='b', ctx=ast.Store())),
-                ast.FunctionDef
-            ]
-        ),
-        Until(ast.Call)
-    )
-)
-
-
-# becomes
-example = Branch(
-    ast.FunctionDef,
-    And(
-        Branch(
-            ast.ClassDef(),
-            Then(
-                Branch(
-                    ('body', ast.Assign),
-                    ast.Name(id='b'),
-                    ('ctx', ast.Store())
-                ),
-                ('body', ast.FunctionDef)
-            )
-        ),
-        Until(ast.Call)
-    )
-)
-
-# becomes
-p1 = Branch(ast.FunctionDef, ast.ClassDef, ('body', ast.Assign), ast.Name(id='b'), ('ctx', ast.Store))
-p2 = Branch(ast.FunctionDef, ast.ClassDef, ('body', ast.FunctionDef))
-p3 = Branch(ast.FunctionDef, Until(ast.Call))
 
 
 def to_ast(x: Any) -> ast.AST:
@@ -185,29 +140,6 @@ if __name__ == '__main__':
         ]
     )
 
-    # ex1, _ = example.normalise().alias()
-    # print(example.first_normal().second_normal().alias({}))
-    #
-    # ex2, _ = example_unexpanded.expand().first_normal().second_normal().alias()
-    # print(example_unexpanded.expand().first_normal().second_normal())
-
-    # for key in ex1:
-    #     print(ex1[key] == ex2[key])
-
-    # print(Seq(ast.ClassDef(
-    #     body=[
-    #         Seq(ast.Assign, ast.Name(id='b', ctx=ast.Store())),
-    #         ast.FunctionDef
-    #     ]
-    # )).expand().first_normal().second_normal())
-
-    s40 = And(Branch(ast.Name(id='b'))).canonical_nf()
-    # print(s40)
-
-    # print(And(And(And(ast.Call))).first_normal().second_normal())
-
-    s30 = Branch(And(Branch(ast.Name(id='b')))).canonical_nf()
-
 
     def digits_to_number(digits: Sequence[int], radix: int) -> int:
         if radix == 1:
@@ -266,8 +198,3 @@ if __name__ == '__main__':
     # print(digits_lt([1, 6, 5], [1, 6, 6]))
     # print(digits_to_number([1, 6, 5], 7), digits_to_number([1, 6, 6], 7))
     #
-    # print(Seq(to_ast(func)).expand().first_normal().second_normal().alias({})[1])
-
-    print(And(Or(And(Branch(ast.AST), Branch(ast.Name)), Branch(ast.Load)), Branch(ast.Store)).canonical_nf())
-    #
-    print(And(Branch(ast.AST), Or(Branch(ast.Name), Branch(ast.Load))).canonical_nf())

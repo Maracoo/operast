@@ -5,6 +5,7 @@ __all__ = [
     "EXT_REPR",
     "And",
     "Branch",
+    "Fork",
     "Or",
     "Operator",
     "Then",
@@ -30,7 +31,7 @@ class Operator(Generic[T]):
         self._cls = elem if isinstance(elem, type) else type(elem)
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Operator):
+        if not isinstance(other, type(self)):
             return NotImplemented
         method = get_ext_method(self._cls, EXT_EQUALS, self._cls.__eq__)
         return method(self.elem, other.elem)
@@ -41,8 +42,8 @@ class Operator(Generic[T]):
         return f'{type(self).__name__}({elem_repr})'
 
 
-TreeElem = Union['TreePattern', Operator, T]
-Aliases = Dict[str, 'Branch']
+TreeElem = Union['TreePattern[T]', Operator[T], T]
+Aliases = Dict[str, 'Branch[T]']
 
 
 EXT_EQUALS = 'te_equals'
@@ -135,7 +136,7 @@ class TreePattern(ABC, Generic[T]):
     #   8) Then(x, Or(y1, y2)) => Or(Then(x, y1), Then(x, y2))
     #
     @abstractmethod
-    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> 'TreePattern':
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> 'TreePattern[T]':
         raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
@@ -143,7 +144,7 @@ class TreePattern(ABC, Generic[T]):
         raise NotImplementedError  # pragma: no cover
 
 
-class Branch(TreePattern):
+class Branch(TreePattern[T]):
     __slots__ = "id",
     count: int = 0
 
@@ -156,7 +157,7 @@ class Branch(TreePattern):
                              f'{TreePattern.__name__} at the end of '
                              f'elems; found: {repr(self)}')
 
-    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern[T]:
         *fst_elems, last = self.elems
         if isinstance(last, TreePattern):
             return last.canonical_nf(index + len(fst_elems), *elems, *fst_elems)
@@ -167,7 +168,7 @@ class Branch(TreePattern):
         yield {self.id: self}, self.id, self.id
 
 
-class ForkPattern(TreePattern, ABC):
+class Fork(TreePattern[T], ABC):
     __slots__ = "index",
 
     def __init__(self, elem: TreeElem[T], *elems: TreeElem[T]) -> None:
@@ -178,13 +179,13 @@ class ForkPattern(TreePattern, ABC):
     def ord(self) -> Type[Ord]:
         return Partial
 
-    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern[T]:
         self.index = index
         includes_or = False
         self_elems = self.elems
         offset = 0
         for i in range(len(self_elems)):
-            elem = self_elems[i]
+            elem = self_elems[offset + i]
             if isinstance(elem, TreePattern):
                 normal = elem.canonical_nf(index, *elems)
                 if isinstance(normal, type(self)) and normal.index == self.index:
@@ -202,7 +203,7 @@ class ForkPattern(TreePattern, ABC):
             return Or(*self.disjunctive_normalise())
         return self
 
-    def disjunctive_normalise(self) -> Iterator[TreePattern]:
+    def disjunctive_normalise(self) -> Iterator[TreePattern[T]]:
         splat_or = (e.elems if isinstance(e, Or) else [e] for e in self.elems)
         for elems in product(*splat_or):
             new = type(self)(*elems)
@@ -226,22 +227,22 @@ class ForkPattern(TreePattern, ABC):
         yield aliases, sib, ord_
 
 
-class And(ForkPattern):
+class And(Fork[T]):
     pass
 
 
-class Then(ForkPattern):
+class Then(Fork[T]):
     @property
     def ord(self) -> Type[Ord]:
         return Total
 
 
-class Or(ForkPattern):
-    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern:
+class Or(Fork[T]):
+    def canonical_nf(self, index: int = 0, *elems: TreeElem[T]) -> TreePattern[T]:
         self_elems = self.elems
         offset = 0
         for i in range(len(self_elems)):
-            elem = self_elems[i]
+            elem = self_elems[offset + i]
             if isinstance(elem, TreePattern):
                 normal = elem.canonical_nf(index, *elems)
                 if isinstance(normal, Or):
