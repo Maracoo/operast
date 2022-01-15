@@ -246,7 +246,7 @@ class TestCanonicalNormalForm:
         while to_check:
             elem = to_check.pop()
             if isinstance(elem, Tree):
-                to_check.extend(elem.elems)
+                to_check.extend(elem)
                 if isinstance(elem, Or):
                     or_count += 1
 

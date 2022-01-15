@@ -61,13 +61,13 @@ def tag_elem(item: TreeElem[ASTElem], name: Optional[str] = None) -> TreeElem[AS
         item.elem = Tag(name, item.elem)
         return item
     elif isinstance(item, Tree):
-        pat_range = 1 if isinstance(item, Branch) else len(item.elems)
+        pat_range = 1 if isinstance(item, Branch) else len(item)
         for i in range(pat_range):
-            sub_elem = item.elems[i]
+            sub_elem = item[i]
             if isinstance(sub_elem, Tree):
                 tag_elem(sub_elem, name)
             else:
-                item.elems[i] = Tag(name, sub_elem)
+                item[i] = Tag(name, sub_elem)
         return item
     else:
         return Tag(name, item)
@@ -100,20 +100,20 @@ def tag_to_pattern(tag: Tag) -> PatternCheck:
 
 
 def branch_to_pattern(branch: Branch[ASTElem], name: Optional[str]) -> PatternCheck:
-    for i, sub_elem in enumerate(branch.elems):
+    for i, sub_elem in enumerate(branch):
         res, _ = _to_pattern(sub_elem)
         assert res is not None
-        branch.elems[i] = res
-    branch.elems[0] = tag_elem(branch.elems[0], name)
+        branch[i] = res
+    branch[0] = tag_elem(branch[0], name)
     return branch, None
 
 
-def fork_pattern_to_pattern(pat: Fork[ASTElem], name: Optional[str]) -> PatternCheck:
-    for i, sub_elem in enumerate(pat.elems):
+def fork_pattern_to_pattern(fork: Fork[ASTElem], name: Optional[str]) -> PatternCheck:
+    for i, sub_elem in enumerate(fork):
         res, _ = _to_pattern(sub_elem, name)
         assert res is not None
-        pat.elems[i] = tag_elem(res, name)
-    return pat, None
+        fork[i] = tag_elem(res, name)
+    return fork, None
 
 
 def operator_to_pattern(op: Operator[ASTElem], name: Optional[str]) -> PatternCheck:
