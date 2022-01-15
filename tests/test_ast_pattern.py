@@ -105,7 +105,7 @@ class TestToPattern:
         expanded = Branch(
             ast.FunctionDef,
             And(
-                Branch(
+                Branch(Branch(
                     ast.ClassDef(),
                     And(Then(
                         Branch(
@@ -117,9 +117,9 @@ class TestToPattern:
                         ),
                         Tag('body', ast.FunctionDef)
                     ))
-                ),
+                )),
                 ast.Call
             )
         )
 
-        assert to_pattern(unexpanded) == expanded
+        assert to_pattern(unexpanded).canonical_nf() == expanded.canonical_nf()

@@ -60,11 +60,11 @@ def tag_elem(item: TreeElem[ASTElem], name: Optional[str] = None) -> TreeElem[AS
             return item
         item.elem = Tag(name, item.elem)
         return item
-    elif isinstance(item, TreePattern):
+    elif isinstance(item, Tree):
         pat_range = 1 if isinstance(item, Branch) else len(item.elems)
         for i in range(pat_range):
             sub_elem = item.elems[i]
-            if isinstance(sub_elem, TreePattern):
+            if isinstance(sub_elem, Tree):
                 tag_elem(sub_elem, name)
             else:
                 item.elems[i] = Tag(name, sub_elem)
@@ -120,11 +120,11 @@ def operator_to_pattern(op: Operator[ASTElem], name: Optional[str]) -> PatternCh
     res, _ = _to_pattern(op.elem, name)
     assert res is not None
     if isinstance(res, Branch):
-        assert not isinstance(res[0], (TreePattern, Operator))
+        assert not isinstance(res[0], (Tree, Operator))
         op.elem = res[0]
         res[0] = tag_elem(op, name)
         return res, None
-    assert not isinstance(res, TreePattern)
+    assert not isinstance(res, Tree)
     op.elem = tag_elem(res, name)
     return op, None
 

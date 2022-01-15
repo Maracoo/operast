@@ -61,7 +61,7 @@ class TestCanonicalNormalForm:
         result = Branch('A', And(Branch('B', 'C'), Branch('D'))).canonical_nf()
         expected = And(Branch('A', 'B', 'C'), Branch('A', 'D'))
         assert result == expected
-        assert isinstance(result, And)
+        assert isinstance(result, Fork)
         assert result.index == 1
 
     #   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
@@ -218,7 +218,7 @@ class TestCanonicalNormalForm:
                 Branch('A', 'A', 'C', 'E')
             )
         )
-        assert isinstance(result, And)
+        assert isinstance(result, Fork)
         assert result.index == 2
         assert result == expected
 
@@ -245,7 +245,7 @@ class TestCanonicalNormalForm:
         to_check = [cnf]
         while to_check:
             elem = to_check.pop()
-            if isinstance(elem, TreePattern):
+            if isinstance(elem, Tree):
                 to_check.extend(elem.elems)
                 if isinstance(elem, Or):
                     or_count += 1
@@ -290,10 +290,10 @@ class TestToExpression:
         tp = Branch('A', 'B', And('C', Branch('D', 'E'))).canonical_nf()
         aliases, sib, ord_ = next(tp.to_exprs())
         assert aliases == {
-            'B2': Branch('A', 'B', 'C'), 'B0': Branch('A', 'B', 'D', 'E')
+            'B1': Branch('A', 'B', 'C'), 'B0': Branch('A', 'B', 'D', 'E')
         }
-        assert sib == Sib(2, 'B2', 'B0')
-        assert ord_ == Partial('B2', 'B0')
+        assert sib == Sib(2, 'B1', 'B0')
+        assert ord_ == Partial('B1', 'B0')
 
     def test_complex_to_expr_2(self):
         pass
