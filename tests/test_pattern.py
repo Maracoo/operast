@@ -14,18 +14,19 @@ def reset_branch_count():
 #   f(x) = Branch(x)    when x is not a TreePattern
 #   f(x) = x            otherwise
 #
-# Let x, y ∈ TreeElem, and let n ∈ ℕ.
+# Let x, y ∈ TreeElem[T], and let n ∈ ℕ.
 # Let Ta, Tb, ... ∈ TreePattern, and let Fa, Fb, ... ∈ ForkPattern.
 # Then, given concrete TreePattern classes Branch, And, Then and Or, we
 # have rewrite rules:
 #
 #   1) Branch(x1, ..., xn, Branch(y1, ..., yn)) => Branch(x1, ..., xn, y1, ..., yn)
-#   2) Branch(x1, ..., xn, Fa(y1, ..., yn)) => Fa(Branch(x1, ..., xn, y1), ..., Branch(x1, ..., xn, yn))
-#   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
-#   4) Fa(x1, ..., xn) => Fa(f(x1), ..., f(xn))
-#   5) Fa(x) => Branch(x)
-#   6) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
-#       iff Fa.index == Fb.index V Fa is Or and Fb is Or
+#   2) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
+#   3) Fa(x1, ..., xn) => Fa(f(x1), ..., f(xn))
+#   4) Fa(x) => Branch(x)
+#   5) Fa(x1, ..., xn, Fb(y1, ..., yn)) => Fa(x1, ..., xn, y1, ..., yn)
+#       iff Fa.loc == Fb.loc V Fa is Or and Fb is Or
+#   6) Branch(x1, ..., xn, Fa(y1, ..., yn)) =>
+#       Fa(Branch(x1, ..., xn, y1), ..., Branch(x1, ..., xn, yn))
 #   7) And(x, Or(y1, y2)) => Or(And(x, y1), And(x, y2))
 #   8) Then(x, Or(y1, y2)) => Or(Then(x, y1), Then(x, y2))
 #
@@ -62,7 +63,7 @@ class TestCanonicalNormalForm:
         expected = And(Branch('A', 'B', 'C'), Branch('A', 'D'))
         assert result == expected
         assert isinstance(result, Fork)
-        assert result.index == 1
+        assert result.loc == 1
 
     #   3) Ta(Tb(x1, ..., xn)) -> Tb(x1, ..., xn)
     def test_Branch_canonical_nf_3(self):
@@ -219,7 +220,7 @@ class TestCanonicalNormalForm:
             )
         )
         assert isinstance(result, Fork)
-        assert result.index == 2
+        assert result.loc == 2
         assert result == expected
 
     def test_complex_canonical_nf_E(self):
@@ -312,7 +313,7 @@ class TestOperator:
 
 
 # noinspection PyPep8Naming
-class TestTreePattern:
+class TestTree:
 
     def test_iter(self):
         for a, b in zip(Branch('A', 'B', 'C'), ['A', 'B', 'C']):

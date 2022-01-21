@@ -1,5 +1,6 @@
 
 import ast
+import pytest
 from operast.ast_pattern import *
 from operast.pattern import *
 
@@ -123,3 +124,7 @@ class TestToPattern:
         )
 
         assert to_pattern(unexpanded).canonical_nf() == expanded.canonical_nf()
+
+    def test_to_pattern_error_1(self):
+        with pytest.raises(ValueError):
+            to_pattern(Branch(ast.AST, ast.AST(ctx=ast.Store), ast.AST))

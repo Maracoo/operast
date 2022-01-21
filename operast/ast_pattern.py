@@ -100,12 +100,9 @@ def tag_to_pattern(tag: Tag) -> PatternCheck:
 
 
 def branch_to_pattern(branch: Branch[ASTElem], name: Optional[str]) -> PatternCheck:
-    for i, sub_elem in enumerate(branch):
-        res, _ = _to_pattern(sub_elem)
-        assert res is not None
-        branch[i] = res
-    branch[0] = tag_elem(branch[0], name)
-    return branch, None
+    new = Branch(*(_to_pattern(e)[0] for e in branch))
+    new[0] = tag_elem(new[0], name)
+    return new, None
 
 
 def fork_pattern_to_pattern(fork: Fork[ASTElem], name: Optional[str]) -> PatternCheck:

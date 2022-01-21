@@ -58,57 +58,57 @@ class TestOrdered:
     #   1) Ord(A, B) => A -> B
     def test_ordered_dag_1(self):
         dag = Total('A', 'B').to_dag()
-        result = {'A': {'B'}}
+        result = {'A': {'B'}, 'B': set()}
         assert dag == result
 
     #   2) Ord(A, Ord(B, C)) => A -> B -> C
     def test_ordered_dag_2(self):
         dag = Total('A', Total('B', 'C')).to_dag()
-        result = {'A': {'B'}, 'B': {'C'}}
+        result = {'A': {'B'}, 'B': {'C'}, 'C': set()}
         assert dag == result
 
     #   3) Ord(A, [B, C]) => A -> B, A -> C
     def test_ordered_dag_3(self):
         dag = Total('A', Partial('B', 'C')).to_dag()
-        result = {'A': {'B', 'C'}}
+        result = {'A': {'B', 'C'}, 'B': set(), 'C': set()}
         assert dag == result
 
     #   4) Ord([A, B], C) => A -> C, B -> C
     def test_ordered_dag_4(self):
         dag = Total(Partial('A', 'B'), 'C').to_dag()
-        result = {'A': {'C'}, 'B': {'C'}}
+        result = {'A': {'C'}, 'B': {'C'}, 'C': set()}
         assert dag == result
 
     #   5) Ord(A, [Ord(B, C), D]) => Ord(A, [B -> C, D]) => A -> B -> C, A -> D
     def test_ordered_dag_5(self):
         dag = Total('A', Partial(Total('B', 'C'), 'D')).to_dag()
-        result = {'A': {'B', 'D'}, 'B': {'C'}}
+        result = {'A': {'B', 'D'}, 'B': {'C'}, 'C': set(), 'D': set()}
         assert dag == result
 
     #   6) Ord([A, Ord(B, C)], D) => Ord([A, B -> C], D) => A -> D, B -> C -> D
     def test_ordered_dag_6(self):
         dag = Total(Partial('A', Total('B', 'C')), 'D').to_dag()
-        result = {'A': {'D'}, 'B': {'C'}, 'C': {'D'}}
+        result = {'A': {'D'}, 'B': {'C'}, 'C': {'D'}, 'D': set()}
         assert dag == result
 
     #   7) Ord(A, [Ord([B, C], D), E]) => Ord(A, [B -> D, C -> D, E]) =>
     #       A -> B -> D, A -> C -> D, A -> E
     def test_ordered_dag_7(self):
         dag = Total('A', Partial(Total(Partial('B', 'C'), 'D'), 'E')).to_dag()
-        result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}}
+        result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}, 'D': set(), 'E': set()}
         assert dag == result
 
     #   8) Ord(A, [Ord([B, C], D), E], F) => Ord(A, [B -> D, C -> D, E], F) =>
     #       A -> B -> D -> F, A -> C -> D -> F, A -> E -> F
     def test_ordered_dag_8(self):
         dag = Total('A', Partial(Total(Partial('B', 'C'), 'D'), 'E'), 'F').to_dag()
-        result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}, 'D': {'F'}, 'E': {'F'}}
+        result = {'A': {'B', 'C', 'E'}, 'B': {'D'}, 'C': {'D'}, 'D': {'F'}, 'E': {'F'}, 'F': set()}
         assert dag == result
 
     #   9) Ord([A, B]) => A, B
     def test_ordered_dag_9(self):
         dag = Partial('B', 'C').to_dag()
-        result = {}
+        result = {'B': set(), 'C': set()}
         assert dag == result
 
     def test_ord_dag_complex_1(self):
@@ -127,7 +127,8 @@ class TestOrdered:
             'B1': {'B2', 'C2'},
             'C1': {'B2', 'C2'},
             'B2': {'D'},
-            'C2': {'D'}
+            'C2': {'D'},
+            'D': set()
         }
         assert dag == expected
 
