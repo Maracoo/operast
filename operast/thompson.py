@@ -3,6 +3,7 @@ __all__ = [
     "Op",
     "Unit",
     "UnitClass",
+    "AnyUnit",
     "UnitEq",
     "Match",
     "Jump",
@@ -35,6 +36,10 @@ class UnitClass(Op[T]):
 
     def __init__(self, units: List[T]) -> None:
         self.units = units
+
+
+class AnyUnit(Op[T]):
+    pass
 
 
 class Match(Op[T]):
@@ -74,6 +79,8 @@ def thompson_vm(program: List[Op[T]], sequence: List[T], ident: UnitEq) -> bool:
             elif isinstance(op, UnitClass):
                 if item is __NO_MATCH or not any(ident(item, u) for u in op.units):
                     continue
+                n_list.append(program_counter + 1)
+            elif isinstance(op, AnyUnit):
                 n_list.append(program_counter + 1)
             elif isinstance(op, Match):
                 return True
