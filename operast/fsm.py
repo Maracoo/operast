@@ -12,11 +12,11 @@ class Op(Generic[T]):
 
 
 class Unit(Op[T]):
-    __slots__ = "unit", "goto"
+    __slots__ = "unit", "next"
 
-    def __init__(self, unit: T, goto: int) -> None:
+    def __init__(self, unit: T, next_: int) -> None:
         self.unit = unit
-        self.goto = goto
+        self.next = next_
 
 
 class Match(Op[T]):
@@ -24,45 +24,39 @@ class Match(Op[T]):
 
 
 class Jump(Op[T]):
-    __slots__ = "op",
+    __slots__ = "goto",
 
-    def __init__(self, op: int) -> None:
-        self.op = op
+    def __init__(self, goto: int) -> None:
+        self.goto = goto
 
 
 class Split(Op[T]):
-    __slots__ = "op_x", "op_y"
+    __slots__ = "goto_ops",
 
     def __init__(self, x: int, y: int) -> None:
-        self.op_x = x
-        self.op_y = y
+        self.goto_ops = [x, y]
+
+
+__NO_MATCH = object()
 
 
 def thompson_vm(program: List[Op[T]], sequence: List[T], ident: UnitEq) -> bool:
-
     clist = [0]
     nlist = []
-    item_counter = 0
-    item = sequence[item_counter]
 
-    while clist:
+    for item in [*sequence, __NO_MATCH]:
         for op_idx in clist:
             op = program[op_idx]
             if isinstance(op, Unit):
-                if not ident(item, op.unit):
+                if item is __NO_MATCH or not ident(item, op.unit):
                     continue
-                nlist.append(op.goto)
+                nlist.append(op.next)
             elif isinstance(op, Match):
                 return True
             elif isinstance(op, Jump):
-                clist.append(op.op)
+                clist.append(op.goto)
             elif isinstance(op, Split):
-                clist.append(op.op_x)
-                clist.append(op.op_y)
-
-        if item_counter < len(sequence):
-            item = sequence[item_counter]
-            item_counter += 1
+                clist.extend(op.goto_ops)
 
         clist = nlist
         nlist = []
@@ -71,5 +65,6 @@ def thompson_vm(program: List[Op[T]], sequence: List[T], ident: UnitEq) -> bool:
 
 
 if __name__ == '__main__':
+    # program for a+b+
     _program = [Unit('a', 1), Split(0, 2), Unit('b', 3), Split(2, 4), Match()]
-    print(thompson_vm(_program, ['a', 'b'], str.__eq__))
+    print(thompson_vm(_program, ['a', 'a', 'a', 'a', 'b', 'b', 'b'], str.__eq__))
