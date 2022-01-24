@@ -20,7 +20,8 @@ UnitEq = Callable[[T, T], bool]
 
 
 class Inst(Generic[T]):
-    pass
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, type(self))
 
 
 class Unit(Inst[T]):
@@ -29,8 +30,13 @@ class Unit(Inst[T]):
     def __init__(self, unit: T) -> None:
         self.unit = unit
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Unit):
+            return NotImplemented
+        return self.unit == other.unit
+
     def __repr__(self) -> str:  # pragma: no cover
-        return f"Unit({repr(self.unit)})"
+        return f"{Unit.__name__}({repr(self.unit)})"
 
 
 class UnitList(Inst[T]):
@@ -39,18 +45,23 @@ class UnitList(Inst[T]):
     def __init__(self, units: List[T]) -> None:
         self.units = units
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, UnitList):
+            return NotImplemented
+        return self.units == other.units
+
     def __repr__(self) -> str:  # pragma: no cover
-        return f"UnitClass({repr(self.units)})"
+        return f"{UnitList.__name__}({repr(self.units)})"
 
 
 class AnyUnit(Inst[T]):
     def __repr__(self) -> str:
-        return "AnyUnit"
+        return f"{AnyUnit.__name__}()"
 
 
 class Match(Inst[T]):
     def __repr__(self) -> str:  # pragma: no cover
-        return "Match"
+        return f"{Match.__name__}()"
 
 
 class Jump(Inst[T]):
@@ -59,18 +70,29 @@ class Jump(Inst[T]):
     def __init__(self, goto: int) -> None:
         self.goto = goto
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Jump):
+            return NotImplemented
+        return self.goto == other.goto
+
     def __repr__(self) -> str:  # pragma: no cover
-        return f"Jump({self.goto})"
+        return f"{Jump.__name__}({self.goto})"
 
 
 class Split(Inst[T]):
-    __slots__ = "goto_inst",
+    __slots__ = "goto_x", "goto_y"
 
     def __init__(self, x: int, y: int) -> None:
-        self.goto_inst = [x, y]
+        self.goto_x = x
+        self.goto_y = y
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Split):
+            return NotImplemented
+        return self.goto_x == other.goto_x and self.goto_y == other.goto_y
 
     def __repr__(self) -> str:  # pragma: no cover
-        return f"Split({self.goto_inst[0]}, {self.goto_inst[1]})"
+        return f"{Split.__name__}({self.goto_x}, {self.goto_y})"
 
 
 __NO_MATCH = object()
@@ -100,7 +122,7 @@ def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> boo
             elif isinstance(inst, Jump):
                 c_list.append(inst.goto)
             elif isinstance(inst, Split):
-                c_list.extend(inst.goto_inst)
+                c_list.extend([inst.goto_x, inst.goto_y])
             else:  # pragma: no cover
                 raise ValueError('Unreachable!')
 

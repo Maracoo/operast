@@ -1,8 +1,8 @@
 
-__all__ = ["Op"]
+__all__ = ["Op", "Repetition", "Plus", "Star", "QMark", "Alt", "Lst", "Dot", "compile_regex"]
 
 from abc import ABC, abstractmethod
-from operast._ext import EXT_EQUALS, EXT_REPR, get_ext_method
+from operast._ext import get_ext_eq, get_ext_repr
 from operast.thompson import *
 from typing import Generic, Iterable, Iterator, List, TypeVar, Union
 
@@ -15,22 +15,36 @@ OpElem = Union[T, 'Operator[T]']
 def op_elem_eq(a: OpElem[T], b: OpElem[T]) -> bool:
     if isinstance(a, Op):
         return a == b
-    _cls = a if isinstance(a, type) else type(a)
-    return get_ext_method(_cls, EXT_EQUALS, _cls.__eq__)(a, b)
+    return get_ext_eq(a if isinstance(a, type) else type(a))(a, b)
 
 
 def op_elem_repr(a: OpElem[T]) -> str:
     if isinstance(a, Op):
         return repr(a)
-    _cls = a if isinstance(a, type) else type(a)
-    return get_ext_method(_cls, EXT_REPR, _cls.__repr__)(a)
+    return get_ext_repr(a if isinstance(a, type) else type(a))(a)
 
 
 class ProgramCounter:
-    __slots__ = "val",
+    __slots__ = "_val",
 
-    def __init__(self):
-        self.val = 0
+    def __init__(self) -> None:
+        self._val = 0
+
+    @property
+    def val(self) -> int:  # Make property to avoid accidental assigns to val
+        return self._val
+
+    def inc(self) -> None:
+        self._val += 1
+
+
+def compile_elements(es: Iterable[OpElem[T]], pc: ProgramCounter) -> Iterator[Inst]:
+    for e in es:
+        if isinstance(e, Op):
+            yield from e.compile(pc)
+        else:
+            pc.inc()  # The only location where we increment for Unit
+            yield Unit(e)
 
 
 class Op(ABC, list, Generic[T]):
@@ -42,18 +56,11 @@ class Op(ABC, list, Generic[T]):
             return NotImplemented
         return all(op_elem_eq(a, b) for a, b in zip(self, other))
 
+    def __ne__(self, other: object) -> bool:
+        return not self == other
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"{type(self).__name__}({', '.join(op_elem_repr(a) for a in self)})"
-
-    def compile_elements(self, pc: ProgramCounter) -> Iterator[Inst]:
-        for e in self:
-            if isinstance(e, Op):
-                for inst in e.compile(pc):
-                    pc.val += 1
-                    yield inst
-            else:
-                pc.val += 1
-                yield Unit(e)
 
     @abstractmethod
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
@@ -71,8 +78,8 @@ class Repetition(Op[T], ABC):
 class Plus(Repetition[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         start = pc.val
-        yield from self.compile_elements(pc)
-        pc.val += 1  # add one for split
+        yield from compile_elements(self, pc)
+        pc.inc()  # increment for split
         if self.greedy:
             yield Split(start, pc.val)
         else:
@@ -82,33 +89,62 @@ class Plus(Repetition[T]):
 class Star(Repetition[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         start = pc.val
-        pc.val += 1  # add one for split
+        pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
         yield split
-        yield from self.compile_elements(pc)
-        pc.val += 1  # add one for jump
+        yield from compile_elements(self, pc)
+        pc.inc()  # increment for jump
         if self.greedy:
-            split.goto_inst[1] = pc.val
+            split.goto_y = pc.val
         else:
-            split.goto_inst[0] = pc.val
+            split.goto_x = pc.val
         yield Jump(start)
 
 
 class QMark(Repetition[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
-        pc.val += 1  # add one for split
+        pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
         yield split
-        yield from self.compile_elements(pc)
+        yield from compile_elements(self, pc)
         if self.greedy:
-            split.goto_inst[1] = pc.val
+            split.goto_y = pc.val
         else:
-            split.goto_inst[0] = pc.val
+            split.goto_x = pc.val
 
 
 class Alt(Op[T]):
+    __slots__ = "left", "right"
+
+    def __init__(self, left: List[OpElem[T]], right: List[OpElem[T]]) -> None:
+        self.left = left
+        self.right = right
+        super().__init__(self, [])  # todo: init intentionally empty, explain why.
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Alt):
+            return NotImplemented
+        left_zip = zip(self.left, other.left)
+        right_zip = zip(self.right, other.right)
+        return (all(op_elem_eq(a, b) for a, b in left_zip) and
+                all(op_elem_eq(a, b) for a, b in right_zip))
+
+    def __repr__(self) -> str:  # pragma: no cover
+        left_repr = ', '.join(op_elem_repr(a) for a in self.left)
+        right_repr = ', '.join(op_elem_repr(a) for a in self.right)
+        return f"{Alt.__name__}([{left_repr}], [{right_repr}])"
+
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
-        pass
+        pc.inc()  # increment for split
+        split = Split(pc.val, pc.val)
+        yield split
+        yield from compile_elements(self.left, pc)
+        pc.inc()  # increment for jump
+        jump = Jump(pc.val)
+        yield jump
+        split.goto_y = pc.val
+        yield from compile_elements(self.right, pc)
+        jump.goto = pc.val
 
 
 class Lst(Op[T]):
@@ -116,13 +152,22 @@ class Lst(Op[T]):
         super().__init__(e, *es)
 
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
-        pc.val += 1
+        pc.inc()
         yield UnitList(self)
 
 
 class Dot(Op[T]):
+    def __init__(self):
+        super().__init__(None)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Dot)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"{Dot.__name__}()"
+
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
-        pc.val += 1
+        pc.inc()
         yield AnyUnit()
 
 
@@ -131,23 +176,5 @@ class Interval(Op[T]):
         pass
 
 
-def unit_or_compile(e: OpElem[T], pc: ProgramCounter) -> Iterator[Inst]:
-    if isinstance(e, Op):
-        yield from e.compile(pc)
-    else:
-        pc.val += 1
-        yield Unit(e)
-
-
 def compile_regex(seq: Iterable[OpElem[T]]) -> List[Inst]:
-    pc = ProgramCounter()
-    instructions = (inst for op in seq for inst in unit_or_compile(op, pc))
-    return [*instructions, Match()]
-
-
-if __name__ == "__main__":
-    print(compile_regex(['a', QMark('b'), 'c']))
-    print(compile_regex(['a', Star('b'), 'c']))
-    print(compile_regex(['a', Plus('b'), 'c']))
-    print(compile_regex([Plus('a'), Plus('b')]))
-    print(compile_regex(['a', Lst('b', 'c'), 'd']))
+    return [*compile_elements(seq, ProgramCounter()), Match()]

@@ -12,7 +12,7 @@ __all__ = [
 
 from abc import ABC, abstractmethod
 from itertools import product, zip_longest
-from operast._ext import EXT_EQUALS, EXT_REPR, get_ext_method
+from operast._ext import get_ext_eq, get_ext_repr
 from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
 from operast.operator import Op
 from typing import Dict, Generic, Iterator, \
@@ -28,15 +28,13 @@ Aliases = Dict[str, 'Branch[T]']
 def tree_elem_eq(a: TreeElem[T], b: TreeElem[T]) -> bool:
     if isinstance(a, (Tree, Op)):
         return a == b
-    _cls = a if isinstance(a, type) else type(a)
-    return get_ext_method(_cls, EXT_EQUALS, _cls.__eq__)(a, b)
+    return get_ext_eq(a if isinstance(a, type) else type(a))(a, b)
 
 
 def tree_elem_repr(a: TreeElem[T]) -> str:
     if isinstance(a, (Tree, Op)):
         return repr(a)
-    _cls = a if isinstance(a, type) else type(a)
-    return get_ext_method(_cls, EXT_REPR, _cls.__repr__)(a)
+    return get_ext_repr(a if isinstance(a, type) else type(a))(a)
 
 
 class Tree(ABC, list, Generic[T]):

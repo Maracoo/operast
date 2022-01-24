@@ -300,18 +300,6 @@ class TestToExpression:
         pass
 
 
-class TestOperator:
-
-    def test_equals(self):
-        s1 = Op('A')
-        s2 = Op('A')
-        s3 = Op('B')
-        pat = And('A', 'B')
-
-        assert s1 == s2
-        assert s1 != s3 != pat
-
-
 # noinspection PyPep8Naming
 class TestTree:
 
