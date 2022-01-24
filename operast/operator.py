@@ -1,11 +1,23 @@
 
-__all__ = ["Op", "Repetition", "Plus", "Star", "QMark", "Alt", "Lst", "Dot", "compile_regex"]
+__all__ = [
+    "Op",
+    "Quantifier",
+    "Plus",
+    "Star",
+    "QMark",
+    "Alt",
+    "Lst",
+    "Dot",
+    "Repeat",
+    # "Clamp",
+    "compile_regex"
+]
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from operast._ext import get_ext_eq, get_ext_repr
 from operast.thompson import *
 from typing import Generic, Iterable, Iterator, List, TypeVar, Union
-
 
 T = TypeVar('T')
 
@@ -31,7 +43,7 @@ class ProgramCounter:
         self._val = 0
 
     @property
-    def val(self) -> int:  # Make property to avoid accidental assigns to val
+    def val(self) -> int:  # Use property to avoid accidental assigns to val
         return self._val
 
     def inc(self) -> None:
@@ -47,38 +59,30 @@ def compile_elements(es: Iterable[OpElem[T]], pc: ProgramCounter) -> Iterator[In
             yield Unit(e)
 
 
-class Op(ABC, list, Generic[T]):
-    def __init__(self, e: OpElem, *es: OpElem) -> None:
-        list.__init__(self, [e, *es])
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, type(self)):
-            return NotImplemented
-        return all(op_elem_eq(a, b) for a, b in zip(self, other))
-
+class Op(ABC, Generic[T]):
     def __ne__(self, other: object) -> bool:
         return not self == other
 
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"{type(self).__name__}({', '.join(op_elem_repr(a) for a in self)})"
-
     @abstractmethod
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
-class Repetition(Op[T], ABC):
-    __slots__ = "greedy",
+@dataclass(init=False)
+class Quantifier(Op[T], ABC):
+    __slots__ = "elems", "greedy"
+    elems: List[OpElem]
+    greedy: bool
 
     def __init__(self, e: OpElem, *es: OpElem, greedy: bool = True) -> None:
+        self.elems: List[OpElem] = [e, *es]
         self.greedy: bool = greedy
-        super().__init__(e, *es)
 
 
-class Plus(Repetition[T]):
+class Plus(Quantifier[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         start = pc.val
-        yield from compile_elements(self, pc)
+        yield from compile_elements(self.elems, pc)
         pc.inc()  # increment for split
         if self.greedy:
             yield Split(start, pc.val)
@@ -86,13 +90,13 @@ class Plus(Repetition[T]):
             yield Split(pc.val, start)
 
 
-class Star(Repetition[T]):
+class Star(Quantifier[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         start = pc.val
         pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
         yield split
-        yield from compile_elements(self, pc)
+        yield from compile_elements(self.elems, pc)
         pc.inc()  # increment for jump
         if self.greedy:
             split.goto_y = pc.val
@@ -101,38 +105,23 @@ class Star(Repetition[T]):
         yield Jump(start)
 
 
-class QMark(Repetition[T]):
+class QMark(Quantifier[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
         yield split
-        yield from compile_elements(self, pc)
+        yield from compile_elements(self.elems, pc)
         if self.greedy:
             split.goto_y = pc.val
         else:
             split.goto_x = pc.val
 
 
+@dataclass
 class Alt(Op[T]):
     __slots__ = "left", "right"
-
-    def __init__(self, left: List[OpElem[T]], right: List[OpElem[T]]) -> None:
-        self.left = left
-        self.right = right
-        super().__init__(self, [])  # todo: init intentionally empty, explain why.
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Alt):
-            return NotImplemented
-        left_zip = zip(self.left, other.left)
-        right_zip = zip(self.right, other.right)
-        return (all(op_elem_eq(a, b) for a, b in left_zip) and
-                all(op_elem_eq(a, b) for a, b in right_zip))
-
-    def __repr__(self) -> str:  # pragma: no cover
-        left_repr = ', '.join(op_elem_repr(a) for a in self.left)
-        right_repr = ', '.join(op_elem_repr(a) for a in self.right)
-        return f"{Alt.__name__}([{left_repr}], [{right_repr}])"
+    left: List[OpElem[T]]
+    right: List[OpElem[T]]
 
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         pc.inc()  # increment for split
@@ -147,33 +136,67 @@ class Alt(Op[T]):
         jump.goto = pc.val
 
 
+@dataclass(init=False)
 class Lst(Op[T]):
+    __slots__ = "elems",
+    elems: List[T]
+
     def __init__(self, e: T, *es: T) -> None:
-        super().__init__(e, *es)
+        self.elems: List[T] = [e, *es]
 
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         pc.inc()
-        yield UnitList(self)
+        yield UnitList(self.elems)
 
 
+@dataclass
 class Dot(Op[T]):
-    def __init__(self):
-        super().__init__(None)
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, Dot)
-
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"{Dot.__name__}()"
-
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
         pc.inc()
         yield AnyUnit()
 
 
-class Interval(Op[T]):
+@dataclass(init=False)
+class Repeat(Op[T]):
+    __slots__ = "count", "elems"
+    count: int
+    elems: List[OpElem]
+
+    def __init__(self, e: OpElem, *es: OpElem, count: int) -> None:
+        self.count: int = count
+        self.elems: List[OpElem] = [e, *es]
+
     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
-        pass
+        for _ in range(self.count):
+            yield from compile_elements(self.elems, pc)
+
+
+# @dataclass(init=False)
+# class Clamp(Op[T]):
+#     __slots__ = "elems", "min", "max"
+#     elems: List[OpElem]
+#     min: int
+#     max: Optional[int]
+#
+#     def __init__(
+#         self,
+#         e: OpElem,
+#         *es: OpElem,
+#         min_: int = 0,
+#         max_: Optional[int] = None
+#     ) -> None:
+#         if isinstance(max_, int) and min_ > max_:
+#             raise ValueError(f"min > max: {min_} > {max_}")
+#         self.elems: List[OpElem] = [e, *es]
+#         self.min: int = min_
+#         self.max: Optional[int] = max_
+#
+#     def diff(self) -> int:
+#         abs_max = 0 if self.max is None else self.max
+#         return abs(abs_max - self.min)
+#
+#     def compile(self, pc: ProgramCounter) -> Iterator[Inst]:
+#         pass
 
 
 def compile_regex(seq: Iterable[OpElem[T]]) -> List[Inst]:

@@ -301,22 +301,6 @@ class TestToExpression:
 
 
 # noinspection PyPep8Naming
-class TestTree:
-
-    def test_iter(self):
-        for a, b in zip(Branch('A', 'B', 'C'), ['A', 'B', 'C']):
-            assert a == b
-
-    def test_getitem(self):
-        assert And('A', Branch('B'), Or('C', 'D'))[1] == Branch('B')
-
-    def test_setitem(self):
-        tp = Then('A', And('B', 'C'), Branch('D'))
-        tp[1] = Then('B', 'C')
-        assert tp == Then('A', Then('B', 'C'), Branch('D'))
-
-
-# noinspection PyPep8Naming
 class TestBranch:
 
     def test_TreePattern_last_elem_only(self):

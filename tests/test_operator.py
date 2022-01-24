@@ -7,9 +7,9 @@ from operast.thompson import *
 class TestOp:
 
     def test_equals(self):
-        s1 = Op('A')
-        s2 = Op('A')
-        s3 = Op('B')
+        s1 = Plus('A')
+        s2 = Plus('A')
+        s3 = Plus('B')
         pat = And('A', 'B')
 
         assert s1 == s2
@@ -60,22 +60,28 @@ class TestCompile:
         expected = [Unit('a'), AnyUnit(), Unit('b'), Match()]
         assert result == expected
 
-    # a(b|c)*d
+    # ab{3}c
     def test_compile_8(self):
+        result = compile_regex(['a', Repeat('b', count=3), 'c'])
+        expected = [Unit('a'), Unit('b'), Unit('b'), Unit('b'), Unit('c'), Match()]
+        assert result == expected
+
+    # a(b|c)*d
+    def test_compile_complex_1(self):
         result = compile_regex(['a', Star(Alt(['b'], ['c'])), 'd'])
         expected = [Unit('a'), Split(2, 7), Split(3, 5), Unit('b'),
                     Jump(6), Unit('c'), Jump(1), Unit('d'), Match()]
         assert result == expected
 
     # a(b|c*)d
-    def test_compile_9(self):
+    def test_compile_complex_2(self):
         result = compile_regex(['a', Alt(['b'], [Star('c')]), 'd'])
         expected = [Unit('a'), Split(2, 4), Unit('b'), Jump(7),
                     Split(5, 7), Unit('c'), Jump(4), Unit('d'), Match()]
         assert result == expected
 
     # .+P
-    def test_compile_10(self):
+    def test_compile_complex_13(self):
         result = compile_regex([Plus(Dot()), 'P'])
         expected = [AnyUnit(), Split(0, 2), Unit('P'), Match()]
         assert result == expected
