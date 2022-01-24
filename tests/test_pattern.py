@@ -303,9 +303,9 @@ class TestToExpression:
 class TestOperator:
 
     def test_equals(self):
-        s1 = Operator('A')
-        s2 = Operator('A')
-        s3 = Operator('B')
+        s1 = Op('A')
+        s2 = Op('A')
+        s3 = Op('B')
         pat = And('A', 'B')
 
         assert s1 == s2

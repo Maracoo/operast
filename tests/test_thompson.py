@@ -50,7 +50,7 @@ class TestThompsonVM:
 
     # a[bc]d
     def test_unit_class_1(self):
-        program = [Unit('a'), UnitClass(['b', 'c']), Unit('d'), Match()]
+        program = [Unit('a'), UnitList(['b', 'c']), Unit('d'), Match()]
         assert not thompson_vm(program, list('a'), str.__eq__)
         assert not thompson_vm(program, list('ab'), str.__eq__)
         assert not thompson_vm(program, list('ac'), str.__eq__)

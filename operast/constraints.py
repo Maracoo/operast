@@ -10,7 +10,6 @@ from typing import Dict, Iterable, Iterator, List, Set, Tuple, TypeVar, Union, c
 
 T = TypeVar('T')
 
-
 SibElem = Union[str, 'Sib']
 
 

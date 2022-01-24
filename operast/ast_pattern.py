@@ -4,6 +4,7 @@ __all__ = ["ASTElem", "Tag", "ast_equals", "ast_repr", "to_pattern"]
 import ast
 from ast import AST
 from itertools import zip_longest
+from operast._ext import EXTENSIONS, EXT_EQUALS, EXT_REPR
 from operast.pattern import *
 from typing import Any, Iterator, List, Optional, Set, Tuple, Type, Union
 
@@ -55,10 +56,10 @@ def tag_elem(item: TreeElem[ASTElem], name: Optional[str] = None) -> TreeElem[AS
         return item
     elif isinstance(item, Tag):
         return item
-    elif isinstance(item, Operator):
-        if isinstance(item.elem, Tag):
+    elif isinstance(item, Op):
+        if isinstance(item[0], Tag):
             return item
-        item.elem = Tag(name, item.elem)
+        item[0] = Tag(name, item[0])
         return item
     elif isinstance(item, Tree):
         pat_range = 1 if isinstance(item, Branch) else len(item)
@@ -113,16 +114,16 @@ def fork_pattern_to_pattern(fork: Fork[ASTElem], name: Optional[str]) -> Pattern
     return fork, None
 
 
-def operator_to_pattern(op: Operator[ASTElem], name: Optional[str]) -> PatternCheck:
-    res, _ = _to_pattern(op.elem, name)
+def operator_to_pattern(op: Op[ASTElem], name: Optional[str]) -> PatternCheck:
+    res, _ = _to_pattern(op.units, name)
     assert res is not None
     if isinstance(res, Branch):
-        assert not isinstance(res[0], (Tree, Operator))
-        op.elem = res[0]
+        assert not isinstance(res[0], (Tree, Op))
+        op.units = res[0]
         res[0] = tag_elem(op, name)
         return res, None
     assert not isinstance(res, Tree)
-    op.elem = tag_elem(res, name)
+    op.units = tag_elem(res, name)
     return op, None
 
 
@@ -152,7 +153,7 @@ def _to_pattern(item: Any, name: Optional[str] = None) -> PatternCheck:
         return branch_to_pattern(item, name)
     elif isinstance(item, Fork):
         return fork_pattern_to_pattern(item, name)
-    elif isinstance(item, Operator):
+    elif isinstance(item, Op):
         return operator_to_pattern(item, name)
     elif isinstance(item, list):
         return list_to_pattern(item, name)
@@ -180,7 +181,7 @@ def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
     return elem.__name__
 
 
-__EXTENSIONS.update({
+EXTENSIONS.update({
     AST: {
         EXT_EQUALS: ast_equals,
         EXT_REPR: ast_repr,

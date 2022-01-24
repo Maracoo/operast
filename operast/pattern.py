@@ -1,88 +1,42 @@
 
 __all__ = [
-    "__EXTENSIONS",
-    "EXT_EQUALS",
-    "EXT_REPR",
     "And",
     "Branch",
     "Fork",
     "Or",
-    "Operator",
+    "Op",
     "Then",
     "TreeElem",
     "Tree",
 ]
 
 from abc import ABC, abstractmethod
-from functools import lru_cache
 from itertools import product, zip_longest
+from operast._ext import EXT_EQUALS, EXT_REPR, get_ext_method
 from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
-from typing import Callable, Dict, Generic, Iterator, \
+from operast.operator import Op
+from typing import Dict, Generic, Iterator, \
     Tuple, Type, TypeVar, Union, Iterable
+
 
 T = TypeVar('T')
 
-
-class Operator(Generic[T]):
-    __slots__ = "elem", "_cls"
-
-    def __init__(self, elem: T):
-        self.elem: T = elem
-        self._cls: Type[T] = elem if isinstance(elem, type) else type(elem)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, type(self)):
-            return NotImplemented
-        method = get_ext_method(self._cls, EXT_EQUALS, self._cls.__eq__)
-        return method(self.elem, other.elem)
-
-    def __repr__(self) -> str:  # pragma: no cover
-        method = get_ext_method(self._cls, EXT_REPR, self._cls.__repr__)
-        elem_repr = method(self.elem)
-        return f'{type(self).__name__}({elem_repr})'
-
-
-TreeElem = Union['Tree[T]', Operator[T], T]
+TreeElem = Union['Tree[T]', Op[T], T]
 Aliases = Dict[str, 'Branch[T]']
 
 
-EXT_EQUALS = 'te_equals'
-EXT_REPR = 'te_repr'
+def tree_elem_eq(a: TreeElem[T], b: TreeElem[T]) -> bool:
+    if isinstance(a, (Tree, Op)):
+        return a == b
+    _cls = a if isinstance(a, type) else type(a)
+    return get_ext_method(_cls, EXT_EQUALS, _cls.__eq__)(a, b)
 
 
-__EXTENSIONS: Dict[type, Dict[str, Callable]] = {}
-
-
-def _extension_type(_cls: type) -> Dict[str, Callable]:
-    if _cls in __EXTENSIONS:
-        return __EXTENSIONS[_cls]
-    for typ in __EXTENSIONS:
-        if issubclass(_cls, typ):
-            return __EXTENSIONS[typ]
-    return {}
-
-
-@lru_cache(maxsize=None)
-def get_ext_method(_cls: Type[T], method: str, default: Callable) -> Callable:
-    func: Callable = getattr(_cls, method, None)
-    if func is not None:
-        return func
-    func = _extension_type(_cls).get(method)
-    return default if func is None else func
-
-
-def tree_elem_eq(elem_a: TreeElem[T], elem_b: TreeElem[T]) -> bool:
-    if isinstance(elem_a, (Tree, Operator)):
-        return elem_a == elem_b
-    _cls = elem_a if isinstance(elem_a, type) else type(elem_a)
-    return get_ext_method(_cls, EXT_EQUALS, _cls.__eq__)(elem_a, elem_b)
-
-
-def tree_elem_repr(elem: TreeElem[T]) -> str:
-    if isinstance(elem, (Tree, Operator)):
-        return repr(elem)
-    _cls = elem if isinstance(elem, type) else type(elem)
-    return get_ext_method(_cls, EXT_REPR, _cls.__repr__)(elem)
+def tree_elem_repr(a: TreeElem[T]) -> str:
+    if isinstance(a, (Tree, Op)):
+        return repr(a)
+    _cls = a if isinstance(a, type) else type(a)
+    return get_ext_method(_cls, EXT_REPR, _cls.__repr__)(a)
 
 
 class Tree(ABC, list, Generic[T]):
