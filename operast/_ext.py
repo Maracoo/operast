@@ -1,26 +1,31 @@
 
-__all__ = ["EXTENSIONS", "EXT_EQUALS", "EXT_REPR", "get_ext_eq", "get_ext_repr"]
+__all__ = ["EXTERN_METHODS", "EXT_EQUALS", "EXT_REPR", "get_ext_eq", "get_ext_repr"]
 
 from functools import lru_cache
 from typing import Callable, Dict, Type, TypeVar
 
 
+# todo: Explain why we have this mechanism using the example of AST.__eq__ not
+#  being suitably defined and the fact that monkey patching builtin types is
+#  not possible.
+
+
 T = TypeVar('T')
 
 
-EXT_EQUALS = 'te_equals'
-EXT_REPR = 'te_repr'
+EXT_EQUALS: str = '__ext_eq__'
+EXT_REPR: str = '__ext_repr__'
 
 
-EXTENSIONS: Dict[type, Dict[str, Callable]] = {}
+EXTERN_METHODS: Dict[type, Dict[str, Callable]] = {}
 
 
 def _extension_type(_cls: type) -> Dict[str, Callable]:
-    if _cls in EXTENSIONS:
-        return EXTENSIONS[_cls]
-    for typ in EXTENSIONS:
+    if _cls in EXTERN_METHODS:
+        return EXTERN_METHODS[_cls]
+    for typ in EXTERN_METHODS:
         if issubclass(_cls, typ):
-            return EXTENSIONS[typ]
+            return EXTERN_METHODS[typ]
     return {}
 
 

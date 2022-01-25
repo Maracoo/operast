@@ -1,6 +1,6 @@
 
 __all__ = ['BX', 'Scope', 'Let', 'Sub', 'HasChild', 'Not', 'Or', 'Basic',
-           'StateAffect', 'Until', 'While', 'START', 'Transition']
+           'StateAffect', 'Until', 'While', 'START']
 
 import ast
 # import astpretty
@@ -9,8 +9,8 @@ from functools import partial
 import operator
 from ast import AST
 from dataclasses import dataclass
-from typing import Optional, Type, Tuple, Dict, \
-    Callable, Iterator, Union, Any, TypeVar, cast
+from typing import Optional, Type, Dict, \
+    Callable, Union, Any, TypeVar, cast
 
 
 ASTOptMutate = Callable[[AST], Optional[AST]]
@@ -266,174 +266,3 @@ class StateAffect:
 Basic = StateAffect()
 Until = StateAffect(fail=_this_state)
 While = StateAffect(succeed=_this_state)
-
-
-PatternElement = Union[StateAffect, PredOrNodeElem]
-
-
-def _as_affect(e: PatternElement) -> StateAffect:
-    return e if isinstance(e, StateAffect) else Basic(e)
-
-
-@dataclass
-class Transition:
-    __slots__ = 'predicate', 'succeed', 'fail', 'state'
-    predicate: ASTPredicate
-    succeed: StateChange
-    fail: StateChange
-    state: State
-
-    def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
-        if self.predicate(node, scope):
-            return node, self.succeed(self.state)
-        return node, self.fail(self.state)
-
-    @classmethod
-    def build(cls, affect: StateAffect, state: State) -> 'Transition':
-        return cls(affect.predicate, affect.succeed, affect.fail, state)
-
-
-@dataclass
-class TransitionAction(Transition):
-    __slots__ = 'action'
-    action: ASTOptMutate
-
-    def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
-        if self.predicate(node, scope):
-            return self.action(node), self.succeed(self.state)
-        return node, self.fail(self.state)
-
-    @classmethod
-    def build_action(cls, affect: StateAffect, state: State, action: ASTOptMutate) -> 'TransitionAction':
-        return cls(affect.predicate, affect.succeed, affect.fail, state, action)
-
-
-@dataclass
-class TransitionFuture(TransitionAction):
-    def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
-        if self.predicate(node, scope):
-            scope.action = partial(self.action, node)
-            return node, self.succeed(self.state)
-        return node, self.fail(self.state)
-
-
-@dataclass
-class TransitionEnd(Transition):
-    def __call__(self, node: AST, scope: Scope) -> Tuple[Optional[AST], State]:
-        if self.predicate(node, scope):
-            assert scope.action is not None  # invariant, should never be false
-            scope.action()
-            return node, self.succeed(self.state)
-        return node, self.fail(self.state)
-
-
-# Turn FSM after 'at' into an acceptor instead of mealy machine, which
-# corresponds to it's use as a function returning a boolean
-
-# impl function as returning iterator[opt[bool]] with True for accepting,
-# None if proceeding but not empty children, False otherwise. Visitor to take
-# action if iter yields True.
-
-
-def acceptor_iter(start: State, state: State, accepting: State, node: AST,
-                  fsa: Callable[[State, AST], State]) -> Iterator[Optional[bool]]:
-    children = list(ast.iter_child_nodes(node))
-
-    yield False
-
-
-# todo: This class is actually a finite state transducer (non-accepting)
-#   in fact, this class just represents the transition function of a mealy machine
-@dataclass(unsafe_hash=True)
-class FiniteStateMachine:
-    __slots__ = 'state_table'
-    state_table: Dict[State, Transition]
-
-    def __call__(self, node: AST, state: State, scope: Scope) -> Tuple[Optional[AST], State]:
-        return self.state_table[state](node, scope)
-
-    @property
-    def start(self) -> Transition:
-        return self.state_table[START]
-
-
-# todo: validate state access for FSM, i.e., warn if state not reachable,
-#  error if accepting state not reachable, error if state not in table
-
-
-def _make_fsm(pattern: Tuple[PatternElement, ...], action: ASTOptMutate,
-              action_state: State) -> FiniteStateMachine:
-    end_state = len(pattern) - 1  # zero based
-    state_table: Dict[State, Transition] = {}
-
-    for state, elem in enumerate(pattern):
-        affect = _as_affect(elem)
-        if state == action_state and state == end_state:
-            affect.succeed_end()
-            transition = TransitionAction.build_action(affect, state, action)
-        elif state == action_state and state != end_state:
-            transition = TransitionFuture.build_action(affect, state, action)
-        elif state != action_state and state == end_state:
-            affect.succeed_end()
-            transition = TransitionEnd.build(affect, state)
-        else:
-            transition = Transition.build(affect, state)
-        state_table[state] = transition
-
-    return FiniteStateMachine(state_table=state_table)
-
-
-# todo: validator function & repr for pretty print (maybe matplotlib?)
-
-# drawback: have to check spelling of attributes
-
-# Use this tool to generate a non-deterministic automata for some body of code
-
-# if __name__ == '__main__':
-#     print()
-#     print(_test7(FunctionDef(name='f', store='hhh', sub=10), td2))
-
-# if not pattern:
-#     raise ValueError('Pattern cannot be empty')
-# end_state = len(pattern) - 1  # zero based
-# action_state = end_state if at is None else at
-# if action_state > end_state:
-#     raise ValueError('param: "at" > length of pattern')
-
-# Delete method: D1
-
-Deleted = set()
-
-
-def __del__(self):
-    Deleted.add(id(self))
-    for node in ast.iter_child_nodes(self):
-        assert hasattr(node, '__del__')
-        del node
-
-
-"""
---- PLAN 1 for suffix checking ---
-
-1. start AT some node
-    add direct children 
-2. iterate through children adding delete method (D1) to children as we go
-3. if fsa returns START then STOP
-4. if fsa returns state such that START < state < ACCEPTING, then yield state
-5. if fsa returns ACCEPTING then yield True
-(default yield False)
-6. if visitor receives True then apply function and check result:
-    if None then Stop suffix check and continue matching
-    if Some(node) then check
-
-
---- PLAN 2 for suffix checking ---
-
-Just have a finite state transducer where we have state X node -> state. 
-Structure this as an iterator which yields nothing on non-accepting, yields 
-True on accepting and yields False only once all possible progeny nodes are 
-checked. If True is yielded then we need to check provenance to ensure we only 
-continue running for nodes which still exist. To do this we check node id's 
-against previously cached existing nodes. If any link is broken then we stop 
-processing on nodes further down the chain.
-"""

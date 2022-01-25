@@ -4,7 +4,7 @@ __all__ = ["ASTElem", "Tag", "ast_equals", "ast_repr", "to_pattern"]
 import ast
 from ast import AST
 from itertools import zip_longest
-from operast._ext import EXTENSIONS, EXT_EQUALS, EXT_REPR
+from operast._ext import EXTERN_METHODS, EXT_EQUALS, EXT_REPR
 from operast.pattern import *
 from typing import Any, Iterator, List, Optional, Set, Tuple, Type, Union
 
@@ -56,7 +56,7 @@ def tag_elem(item: TreeElem[ASTElem], name: Optional[str] = None) -> TreeElem[AS
         return item
     elif isinstance(item, Tag):
         return item
-    elif isinstance(item, Op):
+    elif isinstance(item, Op):  # todo: need to disambiguate Op instances
         if isinstance(item[0], Tag):
             return item
         item[0] = Tag(name, item[0])
@@ -181,7 +181,7 @@ def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
     return elem.__name__
 
 
-EXTENSIONS.update({
+EXTERN_METHODS.update({
     AST: {
         EXT_EQUALS: ast_equals,
         EXT_REPR: ast_repr,

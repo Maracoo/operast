@@ -26,14 +26,14 @@ class Inst(Generic[T]):
 
 @dataclass
 class Unit(Inst[T]):
-    __slots__ = "unit",
-    unit: T
+    __slots__ = "e",
+    e: T
 
 
 @dataclass
 class UnitList(Inst[T]):
-    __slots__ = "units",
-    units: List[T]
+    __slots__ = "ls",
+    ls: List[T]
 
 
 @dataclass
@@ -54,14 +54,15 @@ class Jump(Inst[T]):
 
 @dataclass
 class Split(Inst[T]):
-    __slots__ = "goto_x", "goto_y"
-    goto_x: int
-    goto_y: int
+    __slots__ = "t1", "t2"
+    t1: int
+    t2: int
 
 
 __NO_MATCH = object()
 
 
+# todo: fix threading
 # why not implement a JIT compiler that produces super-ops which reduce the
 # number of epsilon transitions as much as possible.
 def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> bool:
@@ -72,11 +73,11 @@ def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> boo
         for program_counter in c_list:
             inst = program[program_counter]
             if isinstance(inst, Unit):
-                if item is __NO_MATCH or not ident(item, inst.unit):
+                if item is __NO_MATCH or not ident(item, inst.e):
                     continue
                 n_list.append(program_counter + 1)
             elif isinstance(inst, UnitList):
-                if item is __NO_MATCH or not any(ident(item, u) for u in inst.units):
+                if item is __NO_MATCH or not any(ident(item, i) for i in inst.ls):
                     continue
                 n_list.append(program_counter + 1)
             elif isinstance(inst, AnyUnit):
@@ -86,7 +87,7 @@ def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> boo
             elif isinstance(inst, Jump):
                 c_list.append(inst.goto)
             elif isinstance(inst, Split):
-                c_list.extend([inst.goto_x, inst.goto_y])
+                c_list.extend([inst.t1, inst.t2])
             else:  # pragma: no cover
                 raise ValueError('Unreachable!')
 
