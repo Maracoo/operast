@@ -1,6 +1,6 @@
 
 from operast.operator import *
-from operast.pattern import And
+from operast.tree import And
 from operast.thompson import *
 
 

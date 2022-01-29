@@ -2,28 +2,38 @@
 import ast
 import pytest
 from operast.ast_pattern import *
-from operast.pattern import *
+from operast.tree import *
 
 
-class TestASTEquals:
+# noinspection PyPep8Naming
+class Test_ast_strict_equals:
 
-    def test_ast_equals_true_1(self):
-        assert ast_equals(ast.AST, ast.AST)
+    def test_ast_strict_equals_1(self):
+        assert ast_strict_equals(ast.AST, ast.AST)
 
-    def test_ast_equals_true_2(self):
-        assert ast_equals(ast.Name(), ast.Name())
+    def test_ast_strict_equals_2(self):
+        assert ast_strict_equals(ast.Name(), ast.Name())
 
-    def test_ast_equals_true_3(self):
-        assert ast_equals(ast.AST(id='a'), ast.AST(id='a'))
+    def test_ast_strict_equals_3(self):
+        assert ast_strict_equals(ast.AST(id='a'), ast.AST(id='a'))
 
-    def test_ast_equals_false_1(self):
-        assert not ast_equals(ast.AST, ast.Name)
+    def test_ast_strict_equals_4(self):
+        assert not ast_strict_equals(ast.AST, ast.Name)
 
-    def test_ast_equals_false_2(self):
-        assert not ast_equals(ast.AST(), ast.Name())
+    def test_ast_strict_equals_5(self):
+        assert not ast_strict_equals(ast.AST(), ast.Name())
 
-    def test_ast_equals_false_3(self):
-        assert not ast_equals(ast.AST(id='a'), ast.AST(id='b'))
+    def test_ast_strict_equals_6(self):
+        assert not ast_strict_equals(ast.AST(id='a'), ast.AST(id='b'))
+
+    def test_ast_strict_equals_7(self):
+        assert not ast_strict_equals(ast.Name, ast.AST)
+
+    def test_ast_strict_equals_8(self):
+        assert not ast_strict_equals(ast.Name(), ast.AST)
+
+    def test_ast_strict_equals_9(self):
+        assert not ast_strict_equals(ast.And, ast.expr)
 
 
 class TestToPattern:
@@ -42,10 +52,10 @@ class TestToPattern:
         assert expand == expected
 
     def test_ast_to_pattern_1(self):
-        assert ast_equals(to_pattern(ast.AST), ast.AST)
+        assert ast_strict_equals(to_pattern(ast.AST), ast.AST)
 
     def test_ast_to_pattern_2(self):
-        assert ast_equals(to_pattern(ast.Name()), ast.Name())
+        assert ast_strict_equals(to_pattern(ast.Name()), ast.Name())
 
     def test_ast_to_pattern_3(self):
         expand = to_pattern(ast.AST(ctx=ast.Store))

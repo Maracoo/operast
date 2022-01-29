@@ -1,11 +1,11 @@
 
-__all__ = ["ASTElem", "Tag", "ast_equals", "ast_repr", "to_pattern"]
+__all__ = ["ASTElem", "Tag", "ast_strict_equals", "ast_repr", "to_pattern"]
 
 import ast
 from ast import AST
 from itertools import zip_longest
 from operast._ext import EXTERN_METHODS, EXT_EQUALS, EXT_REPR
-from operast.pattern import *
+from operast.tree import *
 from typing import Any, Iterator, List, Optional, Set, Tuple, Type, Union
 
 
@@ -25,7 +25,7 @@ class Tag:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Tag):
             return NotImplemented
-        return self.name == other.name and ast_equals(self.node, other.node)
+        return self.name == other.name and ast_strict_equals(self.node, other.node)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"Tag('{self.name}', {ast_repr(self.node)})"
@@ -167,11 +167,24 @@ def to_pattern(elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
     return result
 
 
-def ast_equals(elem_a: AnyAST, elem_b: AnyAST) -> bool:
-    if isinstance(elem_a, AST) and isinstance(elem_b, AST):
-        zipped = zip_longest(iter_ast(elem_a), iter_ast(elem_b), fillvalue=None)
-        return type(elem_a) is type(elem_b) and all(i == j for i, j in zipped)
-    return elem_a is elem_b
+# todo: describe difference between strict and non-strict equals
+def ast_strict_equals(a: AnyAST, b: AnyAST) -> bool:
+    if isinstance(a, AST) and isinstance(b, AST):
+        zipped = zip_longest(iter_ast(a), iter_ast(b), fillvalue=None)
+        return type(a) is type(b) and all(i == j for i, j in zipped)
+    return a is b
+
+
+_NV = object()
+
+
+def ast_class_id(check: AST, against: Type[AST]) -> bool:
+    return isinstance(check, against)
+
+
+def ast_inst_id(check: AST, against: AST) -> bool:
+    return (isinstance(check, type(against)) and
+            all(getattr(check, k, _NV) == v for k, v in iter_ast(against)))
 
 
 def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
@@ -183,7 +196,7 @@ def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
 
 EXTERN_METHODS.update({
     AST: {
-        EXT_EQUALS: ast_equals,
+        EXT_EQUALS: ast_strict_equals,
         EXT_REPR: ast_repr,
     }
 })

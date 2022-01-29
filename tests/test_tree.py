@@ -1,7 +1,7 @@
 
 import pytest
 from operast.constraints import Sib, Total, Partial
-from operast.pattern import *
+from operast.tree import *
 
 
 @pytest.fixture(autouse=True, scope='function')
