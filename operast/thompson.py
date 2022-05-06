@@ -71,6 +71,8 @@ def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> boo
         step = vm_step(program, c_list, item, ident)
         if step is None:
             return True
+        if len(step) == 0:
+            return False
         c_list = step
     return False
 

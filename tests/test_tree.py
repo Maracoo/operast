@@ -297,7 +297,28 @@ class TestToExpression:
         assert ord_ == Partial('B1', 'B0')
 
     def test_complex_to_expr_2(self):
-        pass
+        tp = Branch('A', 'B', And('C', Branch('D', Or('E', Then('F', 'G'))), 'X')).canonical_nf()
+        result = list(tp.to_exprs())
+        assert len(result) == 2
+
+        alias0, sib0, ord0 = result[0]
+        assert alias0 == {
+            'B4': Branch('A', 'B', 'C'),
+            'B2': Branch('A', 'B', 'D', 'E'),
+            'B5': Branch('A', 'B', 'X')
+        }
+        assert sib0 == Sib(2, 'B4', 'B2', 'B5')
+        assert ord0 == Partial('B4', 'B2', 'B5')
+
+        alias1, sib1, ord1 = result[1]
+        assert alias1 == {
+            'B4': Branch('A', 'B', 'C'),
+            'B0': Branch('A', 'B', 'D', 'F'),
+            'B1': Branch('A', 'B', 'D', 'G'),
+            'B5': Branch('A', 'B', 'X')
+        }
+        assert sib1 == Sib(2, 'B4', Sib(3, 'B0', 'B1'), 'B5')
+        assert ord1 == Partial('B4', Total('B0', 'B1'), 'B5')
 
 
 # noinspection PyPep8Naming

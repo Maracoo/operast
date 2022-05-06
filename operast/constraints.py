@@ -33,7 +33,7 @@ class Sib(list):
 
     def __repr__(self) -> str:  # pragma: no cover
         elem_reprs = ', '.join(repr(e) for e in self)
-        return f"{type(self).__name__}(loc={self.loc}, {elem_reprs})"
+        return f"{type(self).__name__}({self.loc}, {elem_reprs})"
 
     def _flatten(self, elems: Tuple[SibElem, ...]) -> Iterator[SibElem]:
         for elem in elems:

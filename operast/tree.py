@@ -8,6 +8,7 @@ __all__ = [
     "Then",
     "TreeElem",
     "Tree",
+    "compile_tree"
 ]
 
 from abc import ABC, abstractmethod
@@ -17,7 +18,6 @@ from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
 from operast.operator import Op
 from typing import Dict, Generic, Iterator, \
     Tuple, Type, TypeVar, Union, Iterable
-
 
 T = TypeVar('T')
 
@@ -171,3 +171,7 @@ class Or(Fork[T]):
     def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
         for elem in self:
             yield from elem.to_exprs()
+
+
+def compile_tree(t: Tree) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+    return t.canonical_nf().to_exprs()
