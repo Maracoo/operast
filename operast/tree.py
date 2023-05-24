@@ -1,4 +1,3 @@
-
 __all__ = [
     "And",
     "Branch",
@@ -8,32 +7,32 @@ __all__ = [
     "Then",
     "TreeElem",
     "Tree",
-    "compile_tree"
+    "compile_tree",
 ]
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from itertools import product, zip_longest
 from operast._ext import get_ext_eq, get_ext_repr
-from operast.constraints import Ord, OrdElem, Sib, SibElem, Total, Partial
+from operast.constraints import Ord, OrdElem, Partial, Sib, SibElem, Total
 from operast.operator import Op
-from typing import Dict, Generic, Iterator, \
-    Tuple, Type, TypeVar, Union, Iterable
+from typing import Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
-TreeElem = Union['Tree[T]', Op[T], T]
-Aliases = Dict[str, 'Branch[T]']
+TreeElem = Op[T] | T | "Tree[T]"
+Aliases = dict[str, "Branch[T]"]
 
 
 def tree_elem_eq(a: TreeElem[T], b: TreeElem[T]) -> bool:
-    if isinstance(a, (Tree, Op)):
+    if isinstance(a, Tree | Op):
         return a == b
     eq = get_ext_eq(a if isinstance(a, type) else type(a))
     return eq(a, b)
 
 
 def tree_elem_repr(a: TreeElem[T]) -> str:
-    if isinstance(a, (Tree, Op)):
+    if isinstance(a, Tree | Op):
         return repr(a)
     _repr = get_ext_repr(a if isinstance(a, type) else type(a))
     return _repr(a)
@@ -74,16 +73,16 @@ class Tree(ABC, list, Generic[T]):
     #   8) Then(x, Or(y1, y2)) => Or(Then(x, y1), Then(x, y2))
     #
     @abstractmethod
-    def canonical_nf(self, loc: int = 0, *elems: TreeElem[T]) -> 'Tree[T]':
+    def canonical_nf(self, loc: int = 0, *elems: TreeElem[T]) -> "Tree[T]":
         raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
-    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+    def to_exprs(self) -> Iterator[tuple[Aliases, SibElem, OrdElem]]:
         raise NotImplementedError  # pragma: no cover
 
 
 class Branch(Tree[T]):
-    __slots__ = "id",
+    __slots__ = ("id",)
     count: int = 0
 
     def __init__(self, elem: TreeElem[T], *elems: TreeElem[T]) -> None:
@@ -91,8 +90,11 @@ class Branch(Tree[T]):
         self.id = f"B{Branch.count}"
         Branch.count += 1
         if any(isinstance(e, Tree) for e in self[:-1]):
-            raise ValueError(f'{Branch.__name__} may only contain {Tree.__name__} '
-                             f'instances at the end of elems; found: {self}')
+            msg = (
+                f"{Branch.__name__} may only contain {Tree.__name__} "
+                f"instances at the end of elems; found: {self}"
+            )
+            raise ValueError(msg)
 
     def canonical_nf(self, loc: int = 0, *elems: TreeElem[T]) -> Tree[T]:
         *rest, last = self
@@ -101,14 +103,14 @@ class Branch(Tree[T]):
         self[:0] = elems
         return self
 
-    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+    def to_exprs(self) -> Iterator[tuple[Aliases, SibElem, OrdElem]]:
         yield {self.id: self}, self.id, self.id
 
 
-FT = TypeVar('FT', bound='Fork')
+FT = TypeVar("FT", bound="Fork")
 
 
-def flat(t: Type[FT], elems: Iterable[Tree[T]], loc: int) -> Iterator[Tree[T]]:
+def flat(t: type[FT], elems: Iterable[Tree[T]], loc: int) -> Iterator[Tree[T]]:
     for elem in elems:
         if isinstance(elem, t) and loc == elem.loc:
             yield from elem
@@ -117,7 +119,7 @@ def flat(t: Type[FT], elems: Iterable[Tree[T]], loc: int) -> Iterator[Tree[T]]:
 
 
 class Fork(Tree[T], ABC):
-    __slots__ = "loc",
+    __slots__ = ("loc",)
 
     def __init__(self, elem: TreeElem[T], *elems: TreeElem[T], loc: int = 0) -> None:
         trees = (e if isinstance(e, Tree) else Branch(e) for e in (elem, *elems))
@@ -125,7 +127,7 @@ class Fork(Tree[T], ABC):
         self.loc: int = loc
 
     @property
-    def order(self) -> Type[Ord]:
+    def order(self) -> type[Ord]:
         return Partial
 
     def canonical_nf(self, loc: int = 0, *elems: TreeElem[T]) -> Tree[T]:
@@ -142,11 +144,13 @@ class Fork(Tree[T], ABC):
         for elems in product(*splat_or):
             yield type(self)(*flat(type(self), elems, loc), loc=loc)
 
-    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+    def to_exprs(self) -> Iterator[tuple[Aliases, SibElem, OrdElem]]:
         # The call to next may be used blindly since after canonical_nf has
         # been called, the elems of And and Then will only include Branch, And
         # and Then, each of which only ever yields a single tuple.
-        alias_iter, sib_iter, ord_iter = zip(*(next(e.to_exprs()) for e in self))
+        alias_iter, sib_iter, ord_iter = zip(
+            *(next(e.to_exprs()) for e in self), strict=True
+        )
         aliases = dict(t for d in alias_iter for t in d.items())
         sib = Sib(self.loc, *sib_iter)
         order = self.order(*ord_iter)
@@ -159,7 +163,7 @@ class And(Fork[T]):
 
 class Then(Fork[T]):
     @property
-    def order(self) -> Type[Ord]:
+    def order(self) -> type[Ord]:
         return Total
 
 
@@ -168,10 +172,10 @@ class Or(Fork[T]):
         norms = (e.canonical_nf(loc, *elems) for e in self)
         return next(norms) if len(self) == 1 else Or(*flat(Or, norms, 0))
 
-    def to_exprs(self) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+    def to_exprs(self) -> Iterator[tuple[Aliases, SibElem, OrdElem]]:
         for elem in self:
             yield from elem.to_exprs()
 
 
-def compile_tree(t: Tree) -> Iterator[Tuple[Aliases, SibElem, OrdElem]]:
+def compile_tree(t: Tree) -> Iterator[tuple[Aliases, SibElem, OrdElem]]:
     return t.canonical_nf().to_exprs()

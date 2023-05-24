@@ -1,13 +1,13 @@
 import ast
 import astpretty
 import inspect
-from typing import Any, Iterator, List, Sequence, Tuple
+from collections.abc import Iterator, Sequence
+from typing import Any
+
+BranchIndex = tuple[int, ...]
 
 
-BranchIndex = Tuple[int, ...]
-
-
-def iter_child_names_nodes(node: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
+def iter_child_names_nodes(node: ast.AST) -> Iterator[tuple[str, ast.AST]]:
     """
     Yield all pairs of (field name, child node) for direct children of *node*.
     I.e., all field names and values where the values are nodes and all items
@@ -24,15 +24,16 @@ def iter_child_names_nodes(node: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
                     yield name, item
 
 
-def index_traverse_nodes(node: ast.AST, index: Tuple[int, ...] = (),
-                         pos: int = 1) -> Iterator[Tuple[Tuple[int, ...], ast.AST]]:
+def index_traverse_nodes(
+    node: ast.AST, index: tuple[int, ...] = (), pos: int = 1
+) -> Iterator[tuple[tuple[int, ...], ast.AST]]:
     new_index = (*index, pos)
     yield new_index, node
     for breadth, child in enumerate(ast.iter_child_nodes(node), start=1):
         yield from index_traverse_nodes(child, new_index, breadth)
 
 
-def compare_index_lineage(a: Sequence[int], b: Sequence[int], at: List[int]) -> bool:
+def compare_index_lineage(a: Sequence[int], b: Sequence[int], at: list[int]) -> bool:
     max_index = max(at)
     if max_index > len(a) or max_index > len(b):
         return False
@@ -72,23 +73,23 @@ def blah():
 
 
 def to_ast(x: Any) -> ast.AST:
-    return ast.parse(inspect.getsource(x), mode='exec')
+    return ast.parse(inspect.getsource(x), mode="exec")
 
 
 def print_ast(obj: Any) -> None:
-    _ast = ast.parse(inspect.getsource(obj), mode='exec')
+    _ast = ast.parse(inspect.getsource(obj), mode="exec")
     astpretty.pprint(_ast)
     print(ast.dump(_ast))
 
 
 def func(x: int) -> str:
-    b = ' no '
-    a = ' blah'
+    b = " no "
+    a = " blah"
     c = 9
     return str(x) + a + b + str(c)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # import math
     # import itertools
 
@@ -97,63 +98,70 @@ if __name__ == '__main__':
     some_ast = ast.Module(
         body=[
             ast.FunctionDef(
-                name='func',
+                name="func",
                 args=ast.arguments(
                     args=[
-                        ast.arg(arg='x', annotation=ast.Name(id='int', ctx=ast.Load()))
+                        ast.arg(arg="x", annotation=ast.Name(id="int", ctx=ast.Load()))
                     ],
                     vararg=None,
                     kwonlyargs=[],
                     kw_defaults=[],
                     kwarg=None,
-                    defaults=[]
+                    defaults=[],
                 ),
                 body=[
-                    ast.Assign(targets=[ast.Name(id='b', ctx=ast.Store())], value=ast.Str(s=' no ')),
-                    ast.Assign(targets=[ast.Name(id='a', ctx=ast.Store())], value=ast.Str(s=' blah')),
-                    ast.Assign(targets=[ast.Name(id='c', ctx=ast.Store())], value=ast.Num(n=9)),
+                    ast.Assign(
+                        targets=[ast.Name(id="b", ctx=ast.Store())],
+                        value=ast.Str(s=" no "),
+                    ),
+                    ast.Assign(
+                        targets=[ast.Name(id="a", ctx=ast.Store())],
+                        value=ast.Str(s=" blah"),
+                    ),
+                    ast.Assign(
+                        targets=[ast.Name(id="c", ctx=ast.Store())], value=ast.Num(n=9)
+                    ),
                     ast.Return(
                         value=ast.BinOp(
                             left=ast.BinOp(
                                 left=ast.BinOp(
                                     left=ast.Call(
-                                        func=ast.Name(id='str', ctx=ast.Load()),
-                                        args=[ast.Name(id='x', ctx=ast.Load())],
-                                        keywords=[]
+                                        func=ast.Name(id="str", ctx=ast.Load()),
+                                        args=[ast.Name(id="x", ctx=ast.Load())],
+                                        keywords=[],
                                     ),
                                     op=ast.Add(),
-                                    right=ast.Name(id='a', ctx=ast.Load())),
+                                    right=ast.Name(id="a", ctx=ast.Load()),
+                                ),
                                 op=ast.Add(),
-                                right=ast.Name(id='b', ctx=ast.Load())),
+                                right=ast.Name(id="b", ctx=ast.Load()),
+                            ),
                             op=ast.Add(),
                             right=ast.Call(
-                                func=ast.Name(id='str', ctx=ast.Load()),
-                                args=[ast.Name(id='c', ctx=ast.Load())],
-                                keywords=[]
-                            )
+                                func=ast.Name(id="str", ctx=ast.Load()),
+                                args=[ast.Name(id="c", ctx=ast.Load())],
+                                keywords=[],
+                            ),
                         )
-                    )
+                    ),
                 ],
                 decorator_list=[],
-                returns=ast.Name(id='str', ctx=ast.Load())
+                returns=ast.Name(id="str", ctx=ast.Load()),
             )
         ]
     )
 
-
     def digits_to_number(digits: Sequence[int], radix: int) -> int:
         if radix == 1:
             return len(digits) - 1
-        return sum(radix ** i * d for i, d in enumerate(digits[::-1]))
-
+        return sum(radix**i * d for i, d in enumerate(digits[::-1]))
 
     def number_to_digits_iter(number: int, radix: int) -> Iterator[int]:
         while number > 0:
             (number, digit) = divmod(number, radix)
             yield digit
 
-
-    def number_to_digits(number: int, radix: int) -> List[int]:
+    def number_to_digits(number: int, radix: int) -> list[int]:
         if radix == 1:
             return [0 for _ in range(number + 1)]
         return list(number_to_digits_iter(number, radix))[::-1]

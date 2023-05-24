@@ -1,22 +1,6 @@
-import operast
-from setuptools import find_packages, setup
+#!/usr/bin/env python
 
+import setuptools
 
-setup(
-    name='operast',
-    version=operast.__version__,
-    packages=find_packages(),
-    install_requires=[
-        'astpretty',
-        'typing-extensions'
-    ],
-    extras_require={
-        'dev': ['mypy',
-                'pytest',
-                'pytest-cov',
-                'sphinx',
-                'coverage',
-                'mypy-extensions',
-                'hypothesis']
-    }
-)
+if __name__ == "__main__":
+    setuptools.setup()

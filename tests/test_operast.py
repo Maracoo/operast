@@ -1,8 +1,7 @@
-
-import pytest
 import ast
-from operast.operast2 import *
+import pytest
 from operast import operast2
+from operast.operast2 import *
 from typing import Any
 
 
@@ -25,11 +24,11 @@ def test_scope_set_actions():
 
 
 def test_boolean_expression():
-    filter_node = ast.Name(id=BX(lambda v, _scope: v == 'big_name'))
+    filter_node = ast.Name(id=BX(lambda v, _scope: v == "big_name"))
     filters = operast2._get_filter_attrs(filter_node)
 
-    test_node_true = ast.Name(id='big_name')
-    test_node_false = ast.Name(id='small_name')
+    test_node_true = ast.Name(id="big_name")
+    test_node_false = ast.Name(id="small_name")
 
     result1 = operast2._check_attrs(test_node_true, scope=Scope(), filters=filters)
     assert result1
@@ -39,23 +38,23 @@ def test_boolean_expression():
 
 
 def test_let_expression():
-    filter_node = ast.Name(id=Let('name'))
+    filter_node = ast.Name(id=Let("name"))
     filters = operast2._get_filter_attrs(filter_node)
 
-    test_node = ast.Name(id='success')
+    test_node = ast.Name(id="success")
     scope = Scope()
 
     operast2._check_attrs(test_node, scope=scope, filters=filters)
-    assert 'name' in scope.context['id'] and scope.context['id']['name'] == 'success'
+    assert "name" in scope.context["id"] and scope.context["id"]["name"] == "success"
 
 
 def test_sub_expression():
-    filter_node = ast.Name(id=Sub('name'))
+    filter_node = ast.Name(id=Sub("name"))
     filters = operast2._get_filter_attrs(filter_node)
 
-    test_node_true = ast.Name(id='success')
-    test_node_false = ast.Name(id='fail')
-    scope = Scope(context={'id': {'name': 'success'}})
+    test_node_true = ast.Name(id="success")
+    test_node_false = ast.Name(id="fail")
+    scope = Scope(context={"id": {"name": "success"}})
 
     result1 = operast2._check_attrs(test_node_true, scope=scope, filters=filters)
     assert result1
@@ -65,11 +64,11 @@ def test_sub_expression():
 
 
 def test_equals_expression():
-    filter_node = ast.Name(id='success')
+    filter_node = ast.Name(id="success")
     filters = operast2._get_filter_attrs(filter_node)
 
-    test_node_true = ast.Name(id='success')
-    test_node_false = ast.Name(id='fail')
+    test_node_true = ast.Name(id="success")
+    test_node_false = ast.Name(id="fail")
 
     result1 = operast2._check_attrs(test_node_true, scope=Scope(), filters=filters)
     assert result1
@@ -79,12 +78,12 @@ def test_equals_expression():
 
 
 def test_has_children():
-    has_children = ast.FunctionDef(name='a', body=ast.FunctionDef(name='b'))
+    has_children = ast.FunctionDef(name="a", body=ast.FunctionDef(name="b"))
 
     result1 = operast2._has_children(has_children, Scope())
     assert result1
 
-    no_children = ast.FunctionDef(name='a')
+    no_children = ast.FunctionDef(name="a")
     result2 = operast2._has_children(no_children, Scope())
 
     assert not result2
@@ -147,14 +146,14 @@ def test_conjoin_n():
 def test_node_identity():
     # noinspection PyUnusedLocal
     def name_in_set(value: Any, scope: Scope) -> bool:
-        return value in {'func1', 'func2'}
+        return value in {"func1", "func2"}
 
     identity_func1 = operast2.node_identity(ast.FunctionDef(name=BX(name_in_set)))
     identity_func2 = operast2.node_identity(ast.ClassDef())
 
-    function_def_body = ast.FunctionDef(name='func1', body=[ast.Call(func='int')])
-    function_def = ast.FunctionDef(name='func3')
-    class_def = ast.ClassDef(name='func1')
+    function_def_body = ast.FunctionDef(name="func1", body=[ast.Call(func="int")])
+    function_def = ast.FunctionDef(name="func3")
+    class_def = ast.ClassDef(name="func1")
 
     result1 = identity_func1(function_def_body, Scope())
     assert result1
@@ -173,8 +172,8 @@ def test_node_identity():
 def test_HasChild():
     has_child_func = HasChild(ast.FunctionDef).func
 
-    test_node_true = ast.FunctionDef(name='func', body=[ast.Call()])
-    test_node_false = ast.FunctionDef(name='func')
+    test_node_true = ast.FunctionDef(name="func", body=[ast.Call()])
+    test_node_false = ast.FunctionDef(name="func")
 
     result1 = has_child_func(test_node_true, Scope())
     assert result1
@@ -186,10 +185,10 @@ def test_HasChild():
 # noinspection PyPep8Naming
 def test_Not():
     not_name = Not(ast.Name).func
-    not_name_id_hello = operast2.Not(ast.Name(id='hello')).func
+    not_name_id_hello = operast2.Not(ast.Name(id="hello")).func
 
-    name_id_hello = ast.Name(id='hello')
-    name_id_bye = ast.Name(id='bye')
+    name_id_hello = ast.Name(id="hello")
+    name_id_bye = ast.Name(id="bye")
     name_no_id = ast.Name()
 
     result1 = not_name(name_id_hello, Scope())

@@ -1,24 +1,26 @@
-
 __all__ = ["ASTElem", "Tag", "ast_strict_equals", "ast_repr", "to_pattern"]
 
 import ast
 from ast import AST
+from collections.abc import Iterator
 from itertools import zip_longest
-from operast._ext import EXTERN_METHODS, EXT_EQUALS, EXT_REPR
-from operast.tree import *
-from typing import Any, Iterator, List, Optional, Set, Tuple, Type, Union
+from operast._ext import EXT_EQUALS, EXT_REPR, EXTERN_METHODS
+from operast.operator import Op
+from operast.tree import And, Branch, Fork, Then, Tree, TreeElem
+from typing import Any
 
-
-AnyAST = Union[AST, Type[AST]]
+AnyAST = AST | type[AST]
 
 
 class Tag:
     __slots__ = "name", "node"
 
     def __init__(self, name: str, node: AnyAST) -> None:
-        if not (isinstance(node, AST)
-                or isinstance(node, type) and issubclass(node, AST)):
-            raise ValueError(f"node must be an instance of AST or Type[AST]; found: {node}")
+        if not (
+            isinstance(node, AST) or isinstance(node, type) and issubclass(node, AST)
+        ):
+            msg = f"node must be an instance of AST or Type[AST]; found: {node}"
+            raise ValueError(msg)
         self.name = name
         self.node = node
 
@@ -31,27 +33,31 @@ class Tag:
         return f"Tag('{self.name}', {ast_repr(self.node)})"
 
 
-ASTElem = Union[AnyAST, Tag]
+ASTElem = AnyAST | Tag
 
 
 # noinspection PyProtectedMember
-def get_all_ast_fields() -> Set[str]:
-    return {field for obj in ast.__dict__.values() if isinstance(obj, type) and
-            issubclass(obj, AST) for field in obj._fields}
+def get_all_ast_fields() -> set[str]:
+    return {
+        field
+        for obj in ast.__dict__.values()
+        if isinstance(obj, type) and issubclass(obj, AST)
+        for field in obj._fields
+    }
 
 
 PY_AST_FIELDS = get_all_ast_fields()
 
 
-def iter_ast(node: AST) -> Iterator[Tuple[str, Any]]:
+def iter_ast(node: AST) -> Iterator[tuple[str, Any]]:
     yield from ((k, v) for k, v in node.__dict__.items() if k in PY_AST_FIELDS)
 
 
-def ast_fields(node: AST) -> List[Tuple[str, Any]]:
+def ast_fields(node: AST) -> list[tuple[str, Any]]:
     return [(k, v) for k, v in node.__dict__.items() if k in PY_AST_FIELDS]
 
 
-def tag_elem(item: TreeElem[ASTElem], name: Optional[str] = None) -> TreeElem[ASTElem]:
+def tag_elem(item: TreeElem[ASTElem], name: str | None = None) -> TreeElem[ASTElem]:
     if name is None:
         return item
     elif isinstance(item, Tag):
@@ -74,14 +80,14 @@ def tag_elem(item: TreeElem[ASTElem], name: Optional[str] = None) -> TreeElem[AS
         return Tag(name, item)
 
 
-PatternCheck = Tuple[Optional[TreeElem[ASTElem]], Optional[Any]]
+PatternCheck = tuple[TreeElem[ASTElem] | None, Any | None]
 
 
-def ast_type_to_pattern(_cls: Type[AST], name: Optional[str]) -> PatternCheck:
+def ast_type_to_pattern(_cls: type[AST], name: str | None) -> PatternCheck:
     return tag_elem(_cls, name), None
 
 
-def ast_to_pattern(node: AST, name: Optional[str]) -> PatternCheck:
+def ast_to_pattern(node: AST, name: str | None) -> PatternCheck:
     and_elems = []
     for field, attr in ast_fields(node):
         opt_pat, opt_any = _to_pattern(attr, field)
@@ -100,13 +106,13 @@ def tag_to_pattern(tag: Tag) -> PatternCheck:
     return tag_elem(res, tag.name), None
 
 
-def branch_to_pattern(branch: Branch[ASTElem], name: Optional[str]) -> PatternCheck:
+def branch_to_pattern(branch: Branch[ASTElem], name: str | None) -> PatternCheck:
     new = Branch(*(_to_pattern(e)[0] for e in branch))
     new[0] = tag_elem(new[0], name)
     return new, None
 
 
-def fork_pattern_to_pattern(fork: Fork[ASTElem], name: Optional[str]) -> PatternCheck:
+def fork_pattern_to_pattern(fork: Fork[ASTElem], name: str | None) -> PatternCheck:
     for i, sub_elem in enumerate(fork):
         res, _ = _to_pattern(sub_elem, name)
         assert res is not None
@@ -114,11 +120,11 @@ def fork_pattern_to_pattern(fork: Fork[ASTElem], name: Optional[str]) -> Pattern
     return fork, None
 
 
-def operator_to_pattern(op: Op[ASTElem], name: Optional[str]) -> PatternCheck:
+def operator_to_pattern(op: Op[ASTElem], name: str | None) -> PatternCheck:
     res, _ = _to_pattern(op.units, name)
     assert res is not None
     if isinstance(res, Branch):
-        assert not isinstance(res[0], (Tree, Op))
+        assert not isinstance(res[0], Tree | Op)
         op.units = res[0]
         res[0] = tag_elem(op, name)
         return res, None
@@ -127,7 +133,7 @@ def operator_to_pattern(op: Op[ASTElem], name: Optional[str]) -> PatternCheck:
     return op, None
 
 
-def list_to_pattern(lst: List[TreeElem[ASTElem]], name: Optional[str]) -> PatternCheck:
+def list_to_pattern(lst: list[TreeElem[ASTElem]], name: str | None) -> PatternCheck:
     then_elems = []
     offset = 0
     for i in range(len(lst)):
@@ -135,14 +141,14 @@ def list_to_pattern(lst: List[TreeElem[ASTElem]], name: Optional[str]) -> Patter
         if opt_pat is not None:
             then_elems.append(tag_elem(opt_pat, name))
         if opt_any is None:
-            del lst[offset + i:offset + i + 1]
+            del lst[offset + i : offset + i + 1]
             offset -= 1
     any_res = lst if lst else None
     result = Then(*then_elems) if then_elems else None
     return result, any_res
 
 
-def _to_pattern(item: Any, name: Optional[str] = None) -> PatternCheck:
+def _to_pattern(item: Any, name: str | None = None) -> PatternCheck:
     if isinstance(item, type) and issubclass(item, AST):
         return ast_type_to_pattern(item, name)
     elif isinstance(item, AST):
@@ -178,25 +184,28 @@ def ast_strict_equals(a: AnyAST, b: AnyAST) -> bool:
 _NV = object()
 
 
-def ast_class_id(check: AST, against: Type[AST]) -> bool:
+def ast_class_id(check: AST, against: type[AST]) -> bool:
     return isinstance(check, against)
 
 
 def ast_inst_id(check: AST, against: AST) -> bool:
-    return (isinstance(check, type(against)) and
-            all(getattr(check, k, _NV) == v for k, v in iter_ast(against)))
+    return isinstance(check, type(against)) and all(
+        getattr(check, k, _NV) == v for k, v in iter_ast(against)
+    )
 
 
 def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
     if isinstance(elem, AST):
-        field_reprs = ', '.join(f'{f}={repr(v)}' for f, v in iter_ast(elem))
-        return f'{type(elem).__name__}({field_reprs})'
+        field_reprs = ", ".join(f"{f}={repr(v)}" for f, v in iter_ast(elem))
+        return f"{type(elem).__name__}({field_reprs})"
     return elem.__name__
 
 
-EXTERN_METHODS.update({
-    AST: {
-        EXT_EQUALS: ast_strict_equals,
-        EXT_REPR: ast_repr,
+EXTERN_METHODS.update(
+    {
+        AST: {
+            EXT_EQUALS: ast_strict_equals,
+            EXT_REPR: ast_repr,
+        }
     }
-})
+)

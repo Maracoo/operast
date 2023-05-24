@@ -1,54 +1,70 @@
-
-__all__ = ['BX', 'Scope', 'Let', 'Sub', 'HasChild', 'Not', 'Or', 'Basic',
-           'StateAffect', 'Until', 'While', 'START']
+__all__ = [
+    "BX",
+    "Scope",
+    "Let",
+    "Sub",
+    "HasChild",
+    "Not",
+    "Or",
+    "Basic",
+    "StateAffect",
+    "Until",
+    "While",
+    "START",
+]
 
 import ast
-# import astpretty
-from functools import partial
+
 # import inspect
 import operator
 from ast import AST
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Type, Dict, \
-    Callable, Union, Any, TypeVar, cast
 
+# import astpretty
+from functools import partial
+from typing import Any, TypeVar, Union, cast
 
-ASTOptMutate = Callable[[AST], Optional[AST]]
-ASTOptMutateThunk = Callable[[], Optional[AST]]
+ASTOptMutate = Callable[[AST], AST | None]
+ASTOptMutateThunk = Callable[[], AST | None]
 
-ASTElem = Union[AST, Type[AST]]
+ASTElem = Union[AST, type[AST]]
 State = int
 UnaryBoolOp = Callable[[bool], bool]
 BinaryBoolOp = Callable[[bool, bool], bool]
 
 
 START: State = 0
-VISIT_ATTR = '__visit__'
+VISIT_ATTR = "__visit__"
 
-T = TypeVar('T')
-U = TypeVar('U')
+T = TypeVar("T")
+U = TypeVar("U")
 
 
 class Scope:
-    __slots__ = '_action', '_context'
+    __slots__ = "_action", "_context"
 
-    def __init__(self, action: Optional[ASTOptMutateThunk] = None,
-                 context: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        action: ASTOptMutateThunk | None = None,
+        context: dict[str, Any] | None = None,
+    ):
         self._action = action
         self._context = {} if context is None else context
 
     @property
-    def action(self) -> Optional[ASTOptMutateThunk]:
+    def action(self) -> ASTOptMutateThunk | None:
         return self._action
 
     @action.setter
     def action(self, f: ASTOptMutateThunk) -> None:
         if self._action is not None:
-            raise AttributeError('Action already set on scope')
+            msg = "Action already set on scope"
+            raise AttributeError(msg)
         self._action = f
 
     @property
-    def context(self) -> Dict[str, Any]:
+    def context(self) -> dict[str, Any]:
         return self._context
 
     def __setitem__(self, key, value) -> None:
@@ -71,7 +87,8 @@ ASTPredicate = Callable[[AST, Scope], bool]
 @dataclass
 class BX:
     """Boolean Expression"""
-    __slots__ = 'func'
+
+    __slots__ = "func"
     func: ValuePredicate
 
 
@@ -81,7 +98,7 @@ class _NonValue:
 
 @dataclass
 class Let:
-    __slots__ = 'name'
+    __slots__ = "name"
     name: str
 
 
@@ -92,7 +109,7 @@ def _let(value: Any, scope: Scope, attr: str, let: Let) -> bool:
 
 @dataclass
 class Sub:
-    __slots__ = 'name'
+    __slots__ = "name"
     name: str
 
 
@@ -105,7 +122,7 @@ def _value_eq(value: Any, scope: Scope, other: Any) -> bool:
     return value == other
 
 
-def _get_filter_attrs(node: ast.AST) -> Dict[str, ValuePredicate]:
+def _get_filter_attrs(node: ast.AST) -> dict[str, ValuePredicate]:
     filters = {}
     # todo: using node.__dict__ will fail as this include _attributes of a node
     #  as well as all _fields
@@ -126,13 +143,17 @@ def _has_children(node: AST, scope: Scope) -> bool:
     return next((True for _ in ast.iter_child_nodes(node)), False)
 
 
-def _check_attrs(node: ast.AST, scope: Scope, filters: Dict[str, ValuePredicate]) -> bool:
-    return all(predicate(getattr(node, attr, _NonValue), scope)
-               for attr, predicate in filters.items())
+def _check_attrs(
+    node: ast.AST, scope: Scope, filters: dict[str, ValuePredicate]
+) -> bool:
+    return all(
+        predicate(getattr(node, attr, _NonValue), scope)
+        for attr, predicate in filters.items()
+    )
 
 
 # noinspection PyUnusedLocal
-def _check_class(node: ast.AST, scope: Scope, _cls: Type[ast.AST]) -> bool:
+def _check_class(node: ast.AST, scope: Scope, _cls: type[ast.AST]) -> bool:
     return issubclass(type(node), _cls)
 
 
@@ -141,7 +162,7 @@ def _any_node(node: ast.AST, scope: Scope) -> bool:
     return True  # pragma: no cover
 
 
-def _as_pred(e: Union['NodePredicate', ASTElem]) -> ASTPredicate:
+def _as_pred(e: Union["NodePredicate", ASTElem]) -> ASTPredicate:
     return e.func if isinstance(e, NodePredicate) else node_identity(e)
 
 
@@ -160,33 +181,34 @@ def node_identity(node: ASTElem) -> ASTPredicate:
         return _any_node
     # node is a type or an instance of some type in the ast hierarchy
     if isinstance(node, type) and issubclass(node, AST):
-        return cast('ASTPredicate', partial(_check_class, _cls=node))
+        return cast("ASTPredicate", partial(_check_class, _cls=node))
     if isinstance(node, AST):
         cls_func = partial(_check_class, _cls=type(node))
         filters = _get_filter_attrs(node)
         if filters:
             attrs_func = partial(_check_attrs, filters=filters)
             return conjoin_n(cls_func, attrs_func)
-        return cast('ASTPredicate', cls_func)
-    raise ValueError(f'node must be one of: {ASTElem}')
+        return cast("ASTPredicate", cls_func)
+    msg = f"node must be one of: {ASTElem}"
+    raise ValueError(msg)
 
 
-PredOrNodeElem = Union['NodePredicate', ASTElem]
+PredOrNodeElem = Union["NodePredicate", ASTElem]
 
 
 # todo: call it language predicate in the future
 @dataclass
 class NodePredicate:
-    __slots__ = 'func'
+    __slots__ = "func"
     func: ASTPredicate
 
-    def __call__(self, e: PredOrNodeElem) -> 'NodePredicate':
+    def __call__(self, e: PredOrNodeElem) -> "NodePredicate":
         return NodePredicate(conjoin_n(self.func, _as_pred(e)))
 
 
 @dataclass
 class UnaryNodeProposition:
-    __slots__ = 'func'
+    __slots__ = "func"
     func: UnaryBoolOp
 
     def __call__(self, e: PredOrNodeElem) -> NodePredicate:
@@ -195,7 +217,7 @@ class UnaryNodeProposition:
 
 @dataclass
 class BinaryNodeProposition:
-    __slots__ = 'func'
+    __slots__ = "func"
     func: BinaryBoolOp
 
     def __call__(self, e1: PredOrNodeElem, e2: PredOrNodeElem) -> NodePredicate:
@@ -231,28 +253,34 @@ def _to_state(state: State, to: State) -> State:
 
 @dataclass(init=False)
 class StateAffect:
-    __slots__ = 'succeed', 'fail', 'predicate'
+    __slots__ = "succeed", "fail", "predicate"
 
-    def __init__(self, succeed: StateChange = _next_state,
-                 fail: StateChange = _start_state,
-                 predicate: ASTPredicate = _any_node):
+    def __init__(
+        self,
+        succeed: StateChange = _next_state,
+        fail: StateChange = _start_state,
+        predicate: ASTPredicate = _any_node,
+    ):
         self.succeed = succeed
         self.fail = fail
         self.predicate = predicate
 
-    def __call__(self, e: PredOrNodeElem) -> 'StateAffect':
-        if not (isinstance(e, (NodePredicate, AST)) or
-                (isinstance(e, type) and issubclass(e, AST))):
-            raise ValueError(f'StateAffect can only be called '
-                             f'with objects of type: {PredOrNodeElem}')
-        return StateAffect(succeed=self.succeed,
-                           fail=self.fail,
-                           predicate=_as_pred(e))
+    def __call__(self, e: PredOrNodeElem) -> "StateAffect":
+        if not (
+            isinstance(e, NodePredicate | AST)
+            or (isinstance(e, type) and issubclass(e, AST))
+        ):
+            msg = (
+                f"StateAffect can only be called with objects of type: {PredOrNodeElem}"
+            )
+            raise ValueError(msg)
+        return StateAffect(succeed=self.succeed, fail=self.fail, predicate=_as_pred(e))
 
     # todo: do not support goto
     @classmethod
-    def goto(cls, succeed: Optional[State] = None,
-             fail: Optional[State] = None) -> 'StateAffect':
+    def goto(
+        cls, succeed: State | None = None, fail: State | None = None
+    ) -> "StateAffect":
         s = _next_state if succeed is None else partial(_to_state, to=succeed)
         f = _start_state if fail is None else partial(_to_state, to=fail)
         return cls(succeed=s, fail=f)

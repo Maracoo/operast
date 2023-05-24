@@ -1,4 +1,3 @@
-
 __all__ = [
     "Op",
     "Quantifier",
@@ -9,20 +8,21 @@ __all__ = [
     "Lst",
     "Dot",
     "Repeat",
-    "compile_regex"
+    "compile_regex",
 ]
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from itertools import zip_longest
 from operast._ext import get_ext_eq, get_ext_repr
-from operast.thompson import *
-from typing import Generic, Iterable, Iterator, List, TypeVar, Union
+from operast.thompson import AnyUnit, Inst, Jump, Match, Split, Unit, UnitList
+from typing import Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ProgramCounter:
-    __slots__ = "_val",
+    __slots__ = ("_val",)
 
     def __init__(self) -> None:
         self._val = 0
@@ -45,7 +45,7 @@ class Op(ABC, Generic[T]):
         raise NotImplementedError  # pragma: no cover
 
 
-OpElem = Union[T, Op[T]]
+OpElem = T | Op[T]
 
 
 def op_elem_eq(a: OpElem[T], b: OpElem[T]) -> bool:
@@ -79,7 +79,7 @@ class Quantifier(Op[T], ABC):
     __slots__ = "elems", "greedy"
 
     def __init__(self, e: OpElem, *es: OpElem, greedy: bool = True) -> None:
-        self.elems: List[OpElem] = [e, *es]
+        self.elems: list[OpElem] = [e, *es]
         self.greedy: bool = greedy
 
     def __eq__(self, other: object) -> bool:
@@ -88,7 +88,7 @@ class Quantifier(Op[T], ABC):
         return op_elems_eq(self.elems, other.elems) and self.greedy == other.greedy
 
     def __repr__(self) -> str:  # pragma: no cover
-        elems_repr = ', '.join(op_elem_repr(a) for a in self.elems)
+        elems_repr = ", ".join(op_elem_repr(a) for a in self.elems)
         return f"{type(self).__name__}({elems_repr}, greedy={self.greedy})"
 
 
@@ -133,19 +133,20 @@ class QMark(Quantifier[T]):
 class Alt(Op[T]):
     __slots__ = "left", "right"
 
-    def __init__(self, left: List[OpElem[T]], right: List[OpElem[T]]) -> None:
+    def __init__(self, left: list[OpElem[T]], right: list[OpElem[T]]) -> None:
         self.left = left
         self.right = right
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Alt):
             return NotImplemented
-        return (op_elems_eq(self.left, other.left) and
-                op_elems_eq(self.right, other.right))
+        return op_elems_eq(self.left, other.left) and op_elems_eq(
+            self.right, other.right
+        )
 
     def __repr__(self) -> str:  # pragma: no cover
-        left_repr = ', '.join(op_elem_repr(a) for a in self.left)
-        right_repr = ', '.join(op_elem_repr(a) for a in self.right)
+        left_repr = ", ".join(op_elem_repr(a) for a in self.left)
+        right_repr = ", ".join(op_elem_repr(a) for a in self.right)
         return f"{Alt.__name__}([{left_repr}], [{right_repr}])"
 
     def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
@@ -162,10 +163,10 @@ class Alt(Op[T]):
 
 
 class Lst(Op[T]):
-    __slots__ = "elems",
+    __slots__ = ("elems",)
 
     def __init__(self, e: T, *es: T) -> None:
-        self.elems: List[T] = [e, *es]
+        self.elems: list[T] = [e, *es]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Lst):
@@ -173,7 +174,7 @@ class Lst(Op[T]):
         return op_elems_eq(self.elems, other.elems)
 
     def __repr__(self) -> str:  # pragma: no cover
-        elems_repr = ', '.join(op_elem_repr(a) for a in self.elems)
+        elems_repr = ", ".join(op_elem_repr(a) for a in self.elems)
         return f"{type(self).__name__}({elems_repr})"
 
     def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
@@ -198,7 +199,7 @@ class Repeat(Op[T]):
 
     def __init__(self, e: OpElem, *es: OpElem, count: int = 1) -> None:
         self.count: int = count
-        self.elems: List[OpElem] = [e, *es]
+        self.elems: list[OpElem] = [e, *es]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Repeat):
@@ -206,7 +207,7 @@ class Repeat(Op[T]):
         return op_elems_eq(self.elems, other.elems) and self.count == other.count
 
     def __repr__(self) -> str:  # pragma: no cover
-        elems_repr = ', '.join(op_elem_repr(a) for a in self.elems)
+        elems_repr = ", ".join(op_elem_repr(a) for a in self.elems)
         return f"{type(self).__name__}({elems_repr}, count={self.count})"
 
     def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
@@ -214,5 +215,5 @@ class Repeat(Op[T]):
             yield from compile_elements(self.elems, pc)
 
 
-def compile_regex(seq: Iterable[OpElem[T]]) -> List[Inst[T]]:
+def compile_regex(seq: Iterable[OpElem[T]]) -> list[Inst[T]]:
     return [*compile_elements(seq, ProgramCounter()), Match()]

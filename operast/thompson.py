@@ -1,4 +1,3 @@
-
 __all__ = [
     "Inst",
     "Unit",
@@ -9,13 +8,14 @@ __all__ = [
     "Jump",
     "Split",
     "thompson_vm",
-    "vm_step"
+    "vm_step",
 ]
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Generic, List, TypeVar, Optional
+from typing import Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 UnitEq = Callable[[T, T], bool]
 
@@ -26,14 +26,14 @@ class Inst(Generic[T]):
 
 @dataclass
 class Unit(Inst[T]):
-    __slots__ = "e",
+    __slots__ = ("e",)
     e: T
 
 
 @dataclass
 class UnitList(Inst[T]):
-    __slots__ = "ls",
-    ls: List[T]
+    __slots__ = ("ls",)
+    ls: list[T]
 
 
 @dataclass
@@ -48,7 +48,7 @@ class Match(Inst[T]):
 
 @dataclass
 class Jump(Inst[T]):
-    __slots__ = "goto",
+    __slots__ = ("goto",)
     goto: int
 
 
@@ -65,8 +65,8 @@ __NO_MATCH = object()
 # todo: fix threading
 # why not implement a JIT compiler that produces super-ops which reduce the
 # number of epsilon transitions as much as possible.
-def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> bool:
-    c_list: List[int] = [0]
+def thompson_vm(program: list[Inst[T]], sequence: list[T], ident: UnitEq) -> bool:
+    c_list: list[int] = [0]
     for item in [*sequence, __NO_MATCH]:
         step = vm_step(program, c_list, item, ident)
         if step is None:
@@ -77,8 +77,10 @@ def thompson_vm(program: List[Inst[T]], sequence: List[T], ident: UnitEq) -> boo
     return False
 
 
-def vm_step(program: List[Inst[T]], c_list: List[int], item: T, ident: UnitEq) -> Optional[List[int]]:
-    n_list: List[int] = []
+def vm_step(
+    program: list[Inst[T]], c_list: list[int], item: T, ident: UnitEq
+) -> list[int] | None:
+    n_list: list[int] = []
     for program_counter in c_list:
         inst = program[program_counter]
         if isinstance(inst, Unit):
@@ -98,5 +100,6 @@ def vm_step(program: List[Inst[T]], c_list: List[int], item: T, ident: UnitEq) -
         elif isinstance(inst, Split):
             c_list.extend([inst.t1, inst.t2])
         else:  # pragma: no cover
-            raise ValueError('Unreachable!')
+            msg = "Unreachable!"
+            raise ValueError(msg)
     return n_list
