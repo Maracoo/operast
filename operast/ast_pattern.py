@@ -7,7 +7,7 @@ from itertools import zip_longest
 from operast._ext import EXT_EQUALS, EXT_REPR, EXTERN_METHODS
 from operast.operator import Op
 from operast.tree import And, Branch, Fork, Then, Tree, TreeElem
-from typing import Any
+from typing import Any, Final
 
 AnyAST = AST | type[AST]
 
@@ -19,17 +19,17 @@ class Tag:
         if not (
             isinstance(node, AST) or isinstance(node, type) and issubclass(node, AST)
         ):
-            msg = f"node must be an instance of AST or Type[AST]; found: {node}"
+            msg = f"node must be an instance of AST or type[AST]; found: {node}"
             raise ValueError(msg)
         self.name = name
         self.node = node
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Tag):
-            return NotImplemented
+            return False
         return self.name == other.name and ast_strict_equals(self.node, other.node)
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         return f"Tag('{self.name}', {ast_repr(self.node)})"
 
 
@@ -46,7 +46,7 @@ def get_all_ast_fields() -> set[str]:
     }
 
 
-PY_AST_FIELDS = get_all_ast_fields()
+PY_AST_FIELDS: Final[set[str]] = get_all_ast_fields()
 
 
 def iter_ast(node: AST) -> Iterator[tuple[str, Any]]:
@@ -141,14 +141,14 @@ def list_to_pattern(lst: list[TreeElem[ASTElem]], name: str | None) -> PatternCh
         if opt_pat is not None:
             then_elems.append(tag_elem(opt_pat, name))
         if opt_any is None:
-            del lst[offset + i : offset + i + 1]
+            del lst[offset + i: offset + i + 1]
             offset -= 1
-    any_res = lst if lst else None
+    any_res = lst if len(lst) != 0 else None
     result = Then(*then_elems) if then_elems else None
     return result, any_res
 
 
-def _to_pattern(item: Any, name: str | None = None) -> PatternCheck:
+def _to_pattern(item: TreeElem[ASTElem], name: str | None = None) -> PatternCheck:
     if isinstance(item, type) and issubclass(item, AST):
         return ast_type_to_pattern(item, name)
     elif isinstance(item, AST):

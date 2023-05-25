@@ -1,7 +1,7 @@
 from operast.thompson import *
 
 
-def thompson_str(program: list[Inst[str]], in_: str) -> bool:
+def thompson_str(program: list[Instruction[str]], in_: str) -> bool:
     return thompson_vm(program, list(in_), str.__eq__)
 
 
@@ -36,6 +36,7 @@ class TestThompsonVM:
     # a+b+
     def test_one_or_more_2(self):
         program = [Unit("a"), Split(0, 2), Unit("b"), Split(2, 4), Match()]
+        assert thompson_str(program, "ab")
         assert thompson_str(program, "aaaabbb")
         assert not thompson_str(program, "a")
         assert not thompson_str(program, "b")

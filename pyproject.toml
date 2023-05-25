@@ -1,6 +1,7 @@
 [project]
 name = "operast"
 version = "0.1.0"
+authors = ["Marcus Desai"]
 requires-python = ">=3.11"
 readme = "README.md"
 
@@ -29,6 +30,22 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["operast"]
 
+[tool.pytest.ini_options]
+addopts = "--cov=operast --cov-branch --cov-report=term --cov-report=html"
+testpaths = ["tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+    # Standard pragma to ignore lines for coverage
+    "pragma: no cover",
+    # Don't complain if tests don't hit defensive exception code
+    "raise NotImplementedError",
+    # Don't complain about abstract methods, they aren't run
+    "@(abc\\.)?abstractmethod",
+    # Don't complain about __repr__, they're debug only
+    "def __repr__",
+]
+
 [tool.ruff]
 target-version = "py311"
 exclude = [
@@ -52,7 +69,10 @@ exclude = [
     "operast_old.py",
 ]
 
-select = ["A", "B", "C4", "E", "EM", "F", "I", "INP", "ISC", "N", "PGH", "PIE", "RUF", "UP", "W"]
+select = [
+    "A", "ANN", "B", "C4", "E", "EM", "F", "I", "INP",
+    "ISC", "N", "PGH", "PIE", "RUF", "UP", "W"
+]
 
 ignore = [
     # It's fine to shaddow builtin names, as long as the shadowing is namespaced
@@ -67,10 +87,6 @@ ignore = [
 # Same as Black.
 line-length = 88
 
-# Runs fix automatically. We can turn this on once everyone is used to the
-# checks we are running
-#fix = true
-
 [tool.ruff.per-file-ignores]
 # Allow star imports in __init__ only as we use this functionality to simplify
 # fine tuning of package imports for library consumers. Unfortunately, we also
@@ -78,6 +94,8 @@ line-length = 88
 "__init__.py" = ["F401", "F403", "F405"]
 
 "test_*.py" = [
+    # Test functions do not need full annotation
+    "ANN",
     # Test lines can be too long
     "E501",
     # Allow star imports in tests, for convenience.
@@ -98,8 +116,8 @@ line-length = 88
 # instead of the asinine separation of std, 3rd party, etc...
 
 # What should go in this list is the exact name of a package as it is imported,
-# not as it is installed with pip. For example, the "python-dotenv" package is
-# imported as just "dotenv", and this is what we put into the list below.
+# not as it is installed with pip. For example, the "typing-extensions" package is
+# imported as "typing_extensions", and this is what we put into the list below.
 extra-standard-library = [
     # third-party
     "astpretty",

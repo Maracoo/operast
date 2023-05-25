@@ -41,14 +41,14 @@ def tree_elem_repr(a: TreeElem[T]) -> str:
 class Tree(ABC, list, Generic[T]):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Tree):
-            return NotImplemented
+            return False
         zipped = zip_longest(self, other, fillvalue=None)
         return type(self) is type(other) and all(tree_elem_eq(i, j) for i, j in zipped)
 
     def __ne__(self, other: object) -> bool:
         return not self == other
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         return f"{type(self).__name__}({', '.join(tree_elem_repr(e) for e in self)})"
 
     # -- Canonical Normal Form --
@@ -74,11 +74,11 @@ class Tree(ABC, list, Generic[T]):
     #
     @abstractmethod
     def canonical_nf(self, loc: int = 0, *elems: TreeElem[T]) -> "Tree[T]":
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
     @abstractmethod
     def to_exprs(self) -> Iterator[tuple[Aliases, SibElem, OrdElem]]:
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
 
 class Branch(Tree[T]):

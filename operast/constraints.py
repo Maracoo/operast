@@ -5,11 +5,11 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from collections.abc import Iterable as Iter
 from itertools import product
-from typing import TypeVar, cast
+from typing import TypeVar, Union, cast
 
 T = TypeVar("T")
 
-SibElem = str | "Sib"
+SibElem = Union[str, "Sib"]
 
 
 class Sib(list):
@@ -17,13 +17,13 @@ class Sib(list):
 
     __slots__ = ("loc",)
 
-    def __init__(self, loc: int, *elems: SibElem):
+    def __init__(self, loc: int, *elems: SibElem) -> None:
         self.loc: int = loc
         list.__init__(self, self._flatten(elems))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Sib):
-            return NotImplemented
+            return False
         return self.loc == other.loc and all(
             a == b for a, b in zip(self, other, strict=True)
         )
@@ -31,7 +31,7 @@ class Sib(list):
     def __ne__(self, other: object) -> bool:
         return not self == other
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         elem_reprs = ", ".join(repr(e) for e in self)
         return f"{type(self).__name__}({self.loc}, {elem_reprs})"
 
@@ -58,7 +58,7 @@ class Sib(list):
         return ret
 
 
-OrdElem = str | "Ord"
+OrdElem = Union[str, "Ord"]
 StrTuples = str | tuple[str, ...]
 
 
@@ -73,24 +73,24 @@ def flatten_irregular(it: Iterable[T | Iterable[T]]) -> Iterator[T]:
 class Ord(ABC, list):
     """Constraint for tree node order"""
 
-    def __init__(self, *elems: OrdElem):
+    def __init__(self, *elems: OrdElem) -> None:
         list.__init__(self, elems)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
-            return NotImplemented
+            return False
         return list.__eq__(self, other)
 
     def __ne__(self, other: object) -> bool:
         return not self == other
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         elem_reprs = ", ".join(repr(e) for e in self)
         return f"{type(self).__name__}({elem_reprs})"
 
     @abstractmethod
     def _find_paths(self) -> Iterator[list[StrTuples]]:
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
     def paths_product(self) -> Iterator[tuple[str, ...]]:
         for tup in product(*self._find_paths()):

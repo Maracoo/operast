@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from itertools import zip_longest
 from operast._ext import get_ext_eq, get_ext_repr
-from operast.thompson import AnyUnit, Inst, Jump, Match, Split, Unit, UnitList
+from operast.thompson import AnyUnit, Instruction, Jump, Match, Split, Unit, UnitList
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
@@ -38,11 +38,11 @@ class ProgramCounter:
 class Op(ABC, Generic[T]):
     @abstractmethod
     def __eq__(self, other: object) -> bool:
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
     @abstractmethod
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
-        raise NotImplementedError  # pragma: no cover
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
+        raise NotImplementedError
 
 
 OpElem = T | Op[T]
@@ -66,7 +66,9 @@ def op_elem_repr(a: OpElem[T]) -> str:  # pragma: no cover
     return _repr(a)
 
 
-def compile_elements(es: Iterable[OpElem[T]], pc: ProgramCounter) -> Iterator[Inst[T]]:
+def compile_elements(
+    es: Iterable[OpElem[T]], pc: ProgramCounter
+) -> Iterator[Instruction[T]]:
     for e in es:
         if isinstance(e, Op):
             yield from e.compile(pc)
@@ -84,16 +86,16 @@ class Quantifier(Op[T], ABC):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
-            return NotImplemented
+            return False
         return op_elems_eq(self.elems, other.elems) and self.greedy == other.greedy
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         elems_repr = ", ".join(op_elem_repr(a) for a in self.elems)
         return f"{type(self).__name__}({elems_repr}, greedy={self.greedy})"
 
 
 class Plus(Quantifier[T]):
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         start = pc.val
         yield from compile_elements(self.elems, pc)
         pc.inc()  # increment for split
@@ -104,7 +106,7 @@ class Plus(Quantifier[T]):
 
 
 class Star(Quantifier[T]):
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         start = pc.val
         pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
@@ -119,7 +121,7 @@ class Star(Quantifier[T]):
 
 
 class QMark(Quantifier[T]):
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
         yield split
@@ -139,17 +141,17 @@ class Alt(Op[T]):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Alt):
-            return NotImplemented
+            return False
         return op_elems_eq(self.left, other.left) and op_elems_eq(
             self.right, other.right
         )
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         left_repr = ", ".join(op_elem_repr(a) for a in self.left)
         right_repr = ", ".join(op_elem_repr(a) for a in self.right)
-        return f"{Alt.__name__}([{left_repr}], [{right_repr}])"
+        return f"{type(self).__name__}([{left_repr}], [{right_repr}])"
 
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         pc.inc()  # increment for split
         split = Split(pc.val, pc.val)
         yield split
@@ -170,14 +172,14 @@ class Lst(Op[T]):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Lst):
-            return NotImplemented
+            return False
         return op_elems_eq(self.elems, other.elems)
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         elems_repr = ", ".join(op_elem_repr(a) for a in self.elems)
         return f"{type(self).__name__}({elems_repr})"
 
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         pc.inc()
         yield UnitList(self.elems)
 
@@ -186,10 +188,10 @@ class Dot(Op[T]):
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Dot)
 
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"{Dot.__name__}()"
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
 
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         pc.inc()
         yield AnyUnit()
 
@@ -203,17 +205,17 @@ class Repeat(Op[T]):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Repeat):
-            return NotImplemented
+            return False
         return op_elems_eq(self.elems, other.elems) and self.count == other.count
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         elems_repr = ", ".join(op_elem_repr(a) for a in self.elems)
         return f"{type(self).__name__}({elems_repr}, count={self.count})"
 
-    def compile(self, pc: ProgramCounter) -> Iterator[Inst[T]]:
+    def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         for _ in range(self.count):
             yield from compile_elements(self.elems, pc)
 
 
-def compile_regex(seq: Iterable[OpElem[T]]) -> list[Inst[T]]:
+def compile_regex(seq: Iterable[OpElem[T]]) -> list[Instruction[T]]:
     return [*compile_elements(seq, ProgramCounter()), Match()]
