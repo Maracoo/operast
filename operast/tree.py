@@ -16,12 +16,12 @@ from itertools import product, zip_longest
 from operast._ext import get_ext_eq, get_ext_repr
 from operast.constraints import Ord, OrdElem, Partial, Sib, SibElem, Total
 from operast.operator import Op
-from typing import Generic, TypeVar
+from typing import Generic, TypeAlias, TypeVar
 
 T = TypeVar("T")
 
-TreeElem = Op[T] | T | "Tree[T]"
-Aliases = dict[str, "Branch[T]"]
+TreeElem: TypeAlias = Op[T] | T | "Tree[T]"
+Aliases: TypeAlias = dict[str, "Branch[T]"]
 
 
 def tree_elem_eq(a: TreeElem[T], b: TreeElem[T]) -> bool:
@@ -83,12 +83,12 @@ class Tree(ABC, list, Generic[T]):
 
 class Branch(Tree[T]):
     __slots__ = ("id",)
-    count: int = 0
+    id_count: int = 0
 
     def __init__(self, elem: TreeElem[T], *elems: TreeElem[T]) -> None:
         list.__init__(self, [elem, *elems])
-        self.id = f"B{Branch.count}"
-        Branch.count += 1
+        self.id = f"B{Branch.id_count}"
+        Branch.id_count += 1
         if any(isinstance(e, Tree) for e in self[:-1]):
             msg = (
                 f"{Branch.__name__} may only contain {Tree.__name__} "

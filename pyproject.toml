@@ -33,6 +33,9 @@ packages = ["operast"]
 [tool.pytest.ini_options]
 addopts = "--cov=operast --cov-branch --cov-report=term --cov-report=html"
 testpaths = ["tests"]
+filterwarnings = [
+    'ignore:NotImplemented should not be used in a boolean context:DeprecationWarning'
+]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -45,6 +48,18 @@ exclude_lines = [
     # Don't complain about __repr__, they're debug only
     "def __repr__",
 ]
+
+[tool.mypy]
+exclude = [
+    "operast2.py",
+    "operast3.py",
+    "operast_old.py",
+]
+
+[[tool.mypy.overrides]]
+module = "astpretty"
+# astpretty does not provide typestubs or use a py.typed file
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"

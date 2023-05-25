@@ -99,7 +99,9 @@ class TestToPattern:
 
     def test_ast_to_pattern_7(self):
         expand = to_pattern(ast.AST(body=[Branch(ast.Name, ast.Store)]))
-        expected = Branch(ast.AST(), And(Then(Branch(Tag("body", ast.Name), ast.Store))))
+        expected = Branch(
+            ast.AST(), And(Then(Branch(Tag("body", ast.Name), ast.Store)))
+        )
         assert expand == expected
 
     def test_to_pattern_8(self):

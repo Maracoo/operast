@@ -1,13 +1,13 @@
 __all__ = [
+    "Alt",
+    "Dot",
+    "Lst",
     "Op",
     "Quantifier",
     "Plus",
-    "Star",
     "QMark",
-    "Alt",
-    "Lst",
-    "Dot",
     "Repeat",
+    "Star",
     "compile_regex",
 ]
 
@@ -16,7 +16,7 @@ from collections.abc import Iterable, Iterator
 from itertools import zip_longest
 from operast._ext import get_ext_eq, get_ext_repr
 from operast.thompson import AnyUnit, Instruction, Jump, Match, Split, Unit, UnitList
-from typing import Generic, TypeVar
+from typing import Generic, TypeAlias, TypeVar
 
 T = TypeVar("T")
 
@@ -45,12 +45,14 @@ class Op(ABC, Generic[T]):
         raise NotImplementedError
 
 
-OpElem = T | Op[T]
+OpElem: TypeAlias = T | Op[T]
 
 
-def op_elem_eq(a: OpElem[T], b: OpElem[T]) -> bool:
+def op_elem_eq(a: OpElem[T] | None, b: OpElem[T] | None) -> bool:
     if isinstance(a, Op):
         return a == b
+    if a is None or b is None:
+        return False
     eq = get_ext_eq(a if isinstance(a, type) else type(a))
     return eq(a, b)
 
@@ -109,7 +111,7 @@ class Star(Quantifier[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         start = pc.val
         pc.inc()  # increment for split
-        split = Split(pc.val, pc.val)
+        split: Split[T] = Split(pc.val, pc.val)
         yield split
         yield from compile_elements(self.elems, pc)
         pc.inc()  # increment for jump
@@ -123,7 +125,7 @@ class Star(Quantifier[T]):
 class QMark(Quantifier[T]):
     def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         pc.inc()  # increment for split
-        split = Split(pc.val, pc.val)
+        split: Split[T] = Split(pc.val, pc.val)
         yield split
         yield from compile_elements(self.elems, pc)
         if self.greedy:
@@ -153,11 +155,11 @@ class Alt(Op[T]):
 
     def compile(self, pc: ProgramCounter) -> Iterator[Instruction[T]]:
         pc.inc()  # increment for split
-        split = Split(pc.val, pc.val)
+        split: Split[T] = Split(pc.val, pc.val)
         yield split
         yield from compile_elements(self.left, pc)
         pc.inc()  # increment for jump
-        jump = Jump(pc.val)
+        jump: Jump[T] = Jump(pc.val)
         yield jump
         split.t2 = pc.val
         yield from compile_elements(self.right, pc)

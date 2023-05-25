@@ -1,23 +1,23 @@
 __all__ = [
+    "AnyUnit",
     "Instruction",
+    "Jump",
+    "Match",
+    "Split",
     "Unit",
     "UnitList",
-    "AnyUnit",
     "UnitEq",
-    "Match",
-    "Jump",
-    "Split",
     "thompson_vm",
     "vm_step",
 ]
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeAlias, TypeVar
 
 T = TypeVar("T")
 
-UnitEq = Callable[[T, T], bool]
+UnitEq: TypeAlias = Callable[[T, T], bool]
 
 
 class Instruction(Generic[T]):
@@ -63,8 +63,6 @@ __NO_MATCH = object()
 
 
 # todo: fix threading
-# why not implement a JIT compiler that produces super-ops which reduce the
-# number of epsilon transitions as much as possible.
 def thompson_vm(program: list[Instruction[T]], sequence: list[T], eq: UnitEq) -> bool:
     c_list: list[int] = [0]
     for item in [*sequence, __NO_MATCH]:

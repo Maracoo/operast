@@ -5,7 +5,7 @@ from operast.tree import *
 
 @pytest.fixture(autouse=True, scope="function")
 def reset_branch_count():
-    Branch.count = 0
+    Branch.id_count = 0
 
 
 # -- Canonical Normal Form --

@@ -4,7 +4,7 @@ import ast
 from ast import AST
 from collections.abc import Iterator
 from itertools import zip_longest
-from operast._ext import EXT_EQUALS, EXT_REPR, EXTERN_METHODS
+from operast._ext import EXTERN_METHODS, ExternMethods
 from operast.operator import Op
 from operast.tree import And, Branch, Fork, Then, Tree, TreeElem
 from typing import Any, Final
@@ -26,7 +26,7 @@ class Tag:
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Tag):
-            return False
+            return self.node == other
         return self.name == other.name and ast_strict_equals(self.node, other.node)
 
     def __repr__(self) -> str:
@@ -141,7 +141,7 @@ def list_to_pattern(lst: list[TreeElem[ASTElem]], name: str | None) -> PatternCh
         if opt_pat is not None:
             then_elems.append(tag_elem(opt_pat, name))
         if opt_any is None:
-            del lst[offset + i: offset + i + 1]
+            del lst[offset + i : offset + i + 1]
             offset -= 1
     any_res = lst if len(lst) != 0 else None
     result = Then(*then_elems) if then_elems else None
@@ -174,7 +174,7 @@ def to_pattern(elem: TreeElem[ASTElem]) -> TreeElem[ASTElem]:
 
 
 # todo: describe difference between strict and non-strict equals
-def ast_strict_equals(a: AnyAST, b: AnyAST) -> bool:
+def ast_strict_equals(a: AnyAST, b: object) -> bool:
     if isinstance(a, AST) and isinstance(b, AST):
         zipped = zip_longest(iter_ast(a), iter_ast(b), fillvalue=None)
         return type(a) is type(b) and all(i == j for i, j in zipped)
@@ -201,11 +201,4 @@ def ast_repr(elem: AnyAST) -> str:  # pragma: no cover
     return elem.__name__
 
 
-EXTERN_METHODS.update(
-    {
-        AST: {
-            EXT_EQUALS: ast_strict_equals,
-            EXT_REPR: ast_repr,
-        }
-    }
-)
+EXTERN_METHODS.update({AST: ExternMethods(eq=ast_strict_equals, repr=ast_repr)})
