@@ -5,11 +5,11 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from collections.abc import Iterable as Iter
 from itertools import product
-from typing import TypeVar, Union, cast
+from typing import TypeAlias, TypeVar, Union, cast
 
 T = TypeVar("T")
 
-SibElem = Union[str, "Sib"]
+SibElem: TypeAlias = Union[str, "Sib"]
 
 
 class Sib(list):
@@ -47,10 +47,7 @@ class Sib(list):
     #   2) Sib(x, A, Sib(y, B, C)) => [Sib(x, A, B), Sib(y, B, C)]
     def constraint(self) -> list["Sib"]:
         ret = [self]
-        for (
-            i,
-            elem,
-        ) in enumerate(self):
+        for i, elem in enumerate(self):
             if isinstance(elem, Sib):
                 flattened = elem.constraint()
                 ret.extend(flattened)

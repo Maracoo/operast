@@ -92,9 +92,8 @@ select = [
 ignore = [
     # It's fine to shaddow builtin names, as long as the shadowing is namespaced
     "A003",
-    # Ignore ANN101 & ANN102 to avoid annotating all `self` & `cls` args
-    "ANN101",
-    "ANN102",
+    # Ignore to avoid annotating all `self` & `cls` args for methods
+    "ANN101", "ANN102",
     # Ignore use of unicode math symbols
     "RUF003",
 ]
@@ -122,8 +121,8 @@ line-length = 88
     "N801", "N802"
 ]
 
-# setup.py files do not need to be in a dir with an __init__.py file due to the
-# way we organise packages, so ignore the implicit namespace package error.
+# setup.py does not need to be in a dir with an __init__.py file due to the way
+# this package is organised, so ignore the implicit namespace package error.
 "setup.py" = ["INP"]
 
 [tool.ruff.isort]
@@ -131,8 +130,9 @@ line-length = 88
 # instead of the asinine separation of std, 3rd party, etc...
 
 # What should go in this list is the exact name of a package as it is imported,
-# not as it is installed with pip. For example, the "typing-extensions" package is
-# imported as "typing_extensions", and this is what we put into the list below.
+# not verbatim as it is installed with pip. For example, the "typing-extensions"
+# package is imported as "typing_extensions", and this is what we put into the
+# list below.
 extra-standard-library = [
     # third-party
     "astpretty",
